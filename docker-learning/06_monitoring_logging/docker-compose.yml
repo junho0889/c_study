@@ -1,0 +1,159 @@
+# ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+# ■ 파일명: docker-compose.yml
+# ■ 목적: 컨테이너 모니터링 스택 구축
+# ■ 구성: 샘플 앱 + Prometheus + Grafana + cAdvisor
+# ■ 실행: docker-compose up -d
+# ■ 접속: Grafana → http://localhost:3000 (admin/admin)
+# ■       Prometheus → http://localhost:9090
+# ■ 날짜: 2026-03-21
+# ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+# ── 모니터링 아키텍처 ──
+#
+# ┌──────────┐    메트릭 수집    ┌────────────┐    시각화    ┌─────────┐
+# │ cAdvisor │ ──────────────→ │ Prometheus │ ──────────→ │ Grafana │
+# │ (수집기)  │                 │ (저장소)    │             │ (대시보드)│
+# └──────────┘                 └────────────┘             └─────────┘
+#      │                            ↑
+#      │ 컨테이너 메트릭 수집          │ 앱 메트릭 수집
+#      ▼                            │
+# ┌──────────┐               ┌─────┴──────┐
+# │ Docker   │               │  웹 앱      │
+# │ Engine   │               │ (/metrics)  │
+# └──────────┘               └────────────┘
+
+services:
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # 서비스 1: 샘플 웹 앱 (모니터링 대상)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  web:
+    image: python:3.12-slim                  # Python 웹 앱
+    container_name: mon-web                  # 컨테이너 이름
+    command: >
+      bash -c "
+        pip install flask prometheus-client &&
+        python /app/app.py
+      "
+    volumes:
+      - ./app:/app:ro                        # 앱 소스코드 (읽기 전용)
+    ports:
+      - "8000:8000"                          # 웹 앱 포트
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - monitoring                           # 모니터링 네트워크
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # 서비스 2: Prometheus (메트릭 수집 & 저장)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # Prometheus란?
+  # → 시계열 데이터베이스 (시간에 따른 숫자 데이터를 저장)
+  # → "pull" 방식: 타겟에게 주기적으로 메트릭을 물어봐
+  # → 예: "CPU 사용률이 얼마야?" "메모리 사용량은?" "요청 수는?"
+  prometheus:
+    image: prom/prometheus:v2.54.1           # Prometheus 공식 이미지
+    container_name: mon-prometheus           # 컨테이너 이름
+    ports:
+      - "9090:9090"                          # Prometheus 웹 UI
+    volumes:
+      # Prometheus 설정 파일을 바인드 마운트
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # 메트릭 데이터를 볼륨에 영구 보존
+      - prometheus-data:/prometheus          # 시계열 데이터 저장
+    command:
+      # Prometheus 시작 옵션
+      - '--config.file=/etc/prometheus/prometheus.yml'    # 설정 파일 경로
+      - '--storage.tsdb.path=/prometheus'                 # 데이터 저장 경로
+      - '--storage.tsdb.retention.time=15d'               # 데이터 보존 기간 (15일)
+      - '--web.enable-lifecycle'                          # API로 설정 리로드 가능
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - monitoring
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # 서비스 3: Grafana (시각화 대시보드)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # Grafana란?
+  # → 예쁜 대시보드를 만들어주는 도구
+  # → Prometheus의 데이터를 그래프, 차트로 보여줘
+  # → 알림(Alert)도 설정할 수 있어 (슬랙, 이메일 등)
+  grafana:
+    image: grafana/grafana:11.2.2            # Grafana 공식 이미지
+    container_name: mon-grafana              # 컨테이너 이름
+    ports:
+      - "3000:3000"                          # Grafana 웹 UI
+    environment:
+      # 관리자 계정 설정
+      - GF_SECURITY_ADMIN_USER=admin         # 관리자 아이디
+      - GF_SECURITY_ADMIN_PASSWORD=admin     # 관리자 비밀번호 (운영에서는 꼭 바꿔!)
+      # 익명 접근 허용 (학습용이니까)
+      - GF_AUTH_ANONYMOUS_ENABLED=true       # 로그인 없이 볼 수 있게
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer    # 익명 사용자는 읽기만 가능
+      # Prometheus를 기본 데이터 소스로 설정
+      - GF_INSTALL_PLUGINS=grafana-clock-panel  # 추가 플러그인 설치
+    volumes:
+      - grafana-data:/var/lib/grafana        # 대시보드/설정 영구 보존
+    depends_on:
+      prometheus:
+        condition: service_healthy           # Prometheus 준비 후 시작
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - monitoring
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # 서비스 4: cAdvisor (컨테이너 메트릭 수집)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # cAdvisor = Container Advisor
+  # → 실행 중인 모든 컨테이너의 리소스 사용량을 수집해
+  # → CPU, 메모리, 네트워크, 디스크 I/O 등
+  # → Prometheus가 이 데이터를 가져가
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1  # cAdvisor 공식 이미지
+    container_name: mon-cadvisor             # 컨테이너 이름
+    ports:
+      - "8081:8080"                          # cAdvisor 웹 UI
+    volumes:
+      # Docker 소켓과 시스템 정보에 접근해야 컨테이너 메트릭을 수집할 수 있어
+      - /:/rootfs:ro                         # 호스트 파일시스템 (읽기 전용)
+      - /var/run:/var/run:ro                 # Docker 소켓 접근
+      - /sys:/sys:ro                         # 시스템 정보
+      - /var/lib/docker/:/var/lib/docker:ro  # Docker 데이터
+    privileged: true                         # 시스템 정보 접근에 필요
+    restart: unless-stopped
+    networks:
+      - monitoring
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# volumes
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+volumes:
+  prometheus-data:                           # Prometheus 메트릭 데이터
+    driver: local
+    name: mon-prometheus-data
+  grafana-data:                              # Grafana 대시보드/설정
+    driver: local
+    name: mon-grafana-data
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# networks
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+networks:
+  monitoring:
+    driver: bridge
+    name: monitoring-network

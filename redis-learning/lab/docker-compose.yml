@@ -1,0 +1,279 @@
+##############################################################################
+# ■■■ Redis Docker Compose 실습 환경 ■■■
+#
+# 구성 요소:
+#   - Redis Master: 읽기/쓰기를 처리하는 마스터 노드
+#   - Redis Replica x2: 읽기 전용 복제 노드 (고가용성)
+#   - Redis Sentinel x3: 마스터 장애 감지 및 자동 페일오버
+#   - RedisInsight: 웹 기반 Redis 관리/모니터링 도구
+#
+# 실행 방법:
+#   docker-compose up -d
+#
+# 종료 방법:
+#   docker-compose down          # 컨테이너만 삭제
+#   docker-compose down -v       # 컨테이너 + 데이터 삭제
+##############################################################################
+
+version: "3.8"
+
+# ■■■ 서비스 정의 ■■■
+services:
+
+  ##########################################################################
+  # ■■■ Redis Master ■■■
+  # 모든 쓰기 작업을 처리하는 마스터 노드
+  # 데이터를 Replica 노드로 비동기 복제
+  # 클라이언트는 이 노드에 직접 연결하여 읽기/쓰기 수행
+  ##########################################################################
+  redis-master:
+    # 공식 Redis 이미지 (Alpine 기반으로 경량)
+    image: redis:${REDIS_VERSION:-7.2-alpine}
+    container_name: redis-master
+    hostname: redis-master
+    restart: unless-stopped
+    ports:
+      # Redis 기본 포트 (호스트에서 접근용)
+      - "${REDIS_MASTER_PORT:-6379}:6379"
+    # 커스텀 설정 파일을 사용하여 Redis 시작
+    # /usr/local/etc/redis/redis.conf 파일을 마운트하여 적용
+    command: redis-server /usr/local/etc/redis/redis.conf
+    volumes:
+      # 커스텀 설정 파일 마운트 (읽기 전용)
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+      # 데이터 영속화 (RDB 스냅샷 + AOF 로그)
+      - redis-master-data:/data
+    networks:
+      - redis-network
+    # 헬스체크: redis-cli ping 명령으로 상태 확인
+    healthcheck:
+      # PING 명령에 PONG 응답이면 정상
+      # -a 옵션으로 비밀번호 전달 (redis.conf의 requirepass와 일치)
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis1234}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  ##########################################################################
+  # ■■■ Redis Replica 1 ■■■
+  # 마스터의 데이터를 복제받는 읽기 전용 노드
+  # 읽기 부하를 분산하거나, 마스터 장애 시 페일오버 대상
+  ##########################################################################
+  redis-replica-1:
+    image: redis:${REDIS_VERSION:-7.2-alpine}
+    container_name: redis-replica-1
+    hostname: redis-replica-1
+    restart: unless-stopped
+    ports:
+      - "${REDIS_REPLICA1_PORT:-6380}:6379"
+    # 마스터가 먼저 시작되어야 복제 가능
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    # replicaof: 이 노드가 복제할 마스터 주소
+    # masterauth: 마스터 연결 시 사용할 비밀번호
+    command: >
+      redis-server
+      --replicaof redis-master 6379
+      --masterauth ${REDIS_PASSWORD:-redis1234}
+      --requirepass ${REDIS_PASSWORD:-redis1234}
+      --maxmemory ${REDIS_MAXMEMORY:-256mb}
+      --maxmemory-policy ${REDIS_EVICTION_POLICY:-allkeys-lru}
+      --appendonly yes
+      --appendfsync everysec
+    volumes:
+      - redis-replica-1-data:/data
+    networks:
+      - redis-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis1234}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  ##########################################################################
+  # ■■■ Redis Replica 2 ■■■
+  # 두 번째 복제 노드 (Replica 1과 동일한 구성)
+  ##########################################################################
+  redis-replica-2:
+    image: redis:${REDIS_VERSION:-7.2-alpine}
+    container_name: redis-replica-2
+    hostname: redis-replica-2
+    restart: unless-stopped
+    ports:
+      - "${REDIS_REPLICA2_PORT:-6381}:6379"
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    command: >
+      redis-server
+      --replicaof redis-master 6379
+      --masterauth ${REDIS_PASSWORD:-redis1234}
+      --requirepass ${REDIS_PASSWORD:-redis1234}
+      --maxmemory ${REDIS_MAXMEMORY:-256mb}
+      --maxmemory-policy ${REDIS_EVICTION_POLICY:-allkeys-lru}
+      --appendonly yes
+      --appendfsync everysec
+    volumes:
+      - redis-replica-2-data:/data
+    networks:
+      - redis-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis1234}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  ##########################################################################
+  # ■■■ Redis Sentinel 1 ■■■
+  # 마스터/레플리카를 감시하고 장애 시 자동 페일오버 수행
+  # 최소 3대 (과반수 투표를 위해 홀수 권장)
+  # 작동 방식:
+  #   1. 마스터에 주기적으로 PING → 응답 없으면 SDOWN (주관적 다운)
+  #   2. 과반수 Sentinel이 동의 → ODOWN (객관적 다운)
+  #   3. 레플리카 중 하나를 새 마스터로 승격
+  ##########################################################################
+  redis-sentinel-1:
+    image: redis:${REDIS_VERSION:-7.2-alpine}
+    container_name: redis-sentinel-1
+    hostname: redis-sentinel-1
+    restart: unless-stopped
+    ports:
+      # Sentinel 기본 포트
+      - "${REDIS_SENTINEL1_PORT:-26379}:26379"
+    depends_on:
+      redis-master:
+        condition: service_healthy
+      redis-replica-1:
+        condition: service_healthy
+      redis-replica-2:
+        condition: service_healthy
+    # Sentinel 설정 파일을 복사 후 시작 (Sentinel이 설정 파일을 수정하므로 복사본 사용)
+    command: >
+      sh -c "
+        cp /usr/local/etc/redis/sentinel.conf /tmp/sentinel.conf &&
+        redis-sentinel /tmp/sentinel.conf
+      "
+    volumes:
+      - ./sentinel.conf:/usr/local/etc/redis/sentinel.conf:ro
+    networks:
+      - redis-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "26379", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  ##########################################################################
+  # ■■■ Redis Sentinel 2 ■■■
+  ##########################################################################
+  redis-sentinel-2:
+    image: redis:${REDIS_VERSION:-7.2-alpine}
+    container_name: redis-sentinel-2
+    hostname: redis-sentinel-2
+    restart: unless-stopped
+    ports:
+      - "${REDIS_SENTINEL2_PORT:-26380}:26379"
+    depends_on:
+      redis-master:
+        condition: service_healthy
+      redis-replica-1:
+        condition: service_healthy
+      redis-replica-2:
+        condition: service_healthy
+    command: >
+      sh -c "
+        cp /usr/local/etc/redis/sentinel.conf /tmp/sentinel.conf &&
+        redis-sentinel /tmp/sentinel.conf
+      "
+    volumes:
+      - ./sentinel.conf:/usr/local/etc/redis/sentinel.conf:ro
+    networks:
+      - redis-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "26379", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  ##########################################################################
+  # ■■■ Redis Sentinel 3 ■■■
+  ##########################################################################
+  redis-sentinel-3:
+    image: redis:${REDIS_VERSION:-7.2-alpine}
+    container_name: redis-sentinel-3
+    hostname: redis-sentinel-3
+    restart: unless-stopped
+    ports:
+      - "${REDIS_SENTINEL3_PORT:-26381}:26379"
+    depends_on:
+      redis-master:
+        condition: service_healthy
+      redis-replica-1:
+        condition: service_healthy
+      redis-replica-2:
+        condition: service_healthy
+    command: >
+      sh -c "
+        cp /usr/local/etc/redis/sentinel.conf /tmp/sentinel.conf &&
+        redis-sentinel /tmp/sentinel.conf
+      "
+    volumes:
+      - ./sentinel.conf:/usr/local/etc/redis/sentinel.conf:ro
+    networks:
+      - redis-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "26379", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  ##########################################################################
+  # ■■■ RedisInsight (웹 UI) ■■■
+  # Redis 데이터를 시각적으로 탐색/관리할 수 있는 공식 GUI 도구
+  # 접속 주소: http://localhost:5540
+  # 기능: 데이터 브라우저, CLI, 슬로우 로그, 메모리 분석 등
+  ##########################################################################
+  redisinsight:
+    image: redis/redisinsight:${REDISINSIGHT_VERSION:-latest}
+    container_name: redisinsight
+    hostname: redisinsight
+    restart: unless-stopped
+    ports:
+      # RedisInsight 웹 포트
+      - "${REDISINSIGHT_PORT:-5540}:5540"
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    volumes:
+      # RedisInsight 설정/데이터 영속화
+      - redisinsight-data:/data
+    networks:
+      - redis-network
+
+# ■■■ 볼륨 정의 ■■■
+volumes:
+  # 마스터 데이터 (RDB + AOF 파일 저장)
+  redis-master-data:
+    driver: local
+  # 레플리카 1 데이터
+  redis-replica-1-data:
+    driver: local
+  # 레플리카 2 데이터
+  redis-replica-2-data:
+    driver: local
+  # RedisInsight 설정 데이터
+  redisinsight-data:
+    driver: local
+
+# ■■■ 네트워크 정의 ■■■
+networks:
+  redis-network:
+    driver: bridge
+    name: redis-network

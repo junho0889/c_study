@@ -1,0 +1,133 @@
+<Window x:Class="LessonWpf.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:LessonWpf"
+        Title="WPF MVVM Todo 리스트"
+        Height="500"
+        Width="550"
+        WindowStartupLocation="CenterScreen">
+    <!--
+    ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+    ■  WPF 05 - 커맨드와 MVVM 패턴                            ■
+    ■  할 일 목록(Todo) 앱 만들기                               ■
+    ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+    MVVM 패턴이란?
+      Model     = 데이터 (할 일 목록의 실제 내용)
+      View      = 화면 (이 XAML 파일)
+      ViewModel = 화면과 데이터를 연결하는 중간 관리자
+
+    비유: 레스토랑
+      Model     = 주방의 요리 재료와 레시피
+      View      = 손님이 보는 메뉴판과 테이블
+      ViewModel = 웨이터 (손님 주문을 주방에 전달, 요리를 손님에게 가져옴)
+
+    ICommand란?
+      버튼 클릭 같은 행동을 "명령 객체"로 만드는 것입니다.
+      Click 이벤트 대신 Command를 바인딩하면
+      ViewModel에서 모든 로직을 처리할 수 있어요!
+    -->
+
+    <Window.DataContext>
+        <!-- ViewModel을 DataContext로 설정 = 웨이터를 배정 -->
+        <local:TodoViewModel />
+    </Window.DataContext>
+
+    <DockPanel Margin="15">
+        <!-- 제목 -->
+        <TextBlock DockPanel.Dock="Top"
+                   Text="할 일 목록 (MVVM)"
+                   FontSize="22"
+                   FontWeight="Bold"
+                   Margin="0,0,0,15" />
+
+        <!-- ┌─────────────────────────────────────────┐ -->
+        <!-- │  입력 영역                               │ -->
+        <!-- └─────────────────────────────────────────┘ -->
+        <StackPanel DockPanel.Dock="Top"
+                    Orientation="Horizontal"
+                    Margin="0,0,0,10">
+            <!-- TextBox와 ViewModel의 NewTodoText를 양방향 바인딩 -->
+            <!-- UpdateSourceTrigger=PropertyChanged:
+                 글자를 입력할 때마다 즉시 ViewModel에 반영 -->
+            <TextBox Text="{Binding NewTodoText, UpdateSourceTrigger=PropertyChanged}"
+                     Width="350"
+                     FontSize="14"
+                     Padding="8,5"
+                     VerticalContentAlignment="Center" />
+
+            <!-- Command 바인딩: Click 이벤트 대신 Command를 사용!
+                 버튼을 누르면 ViewModel의 AddCommand가 실행됩니다.
+                 웨이터에게 "추가해주세요" 주문하는 것과 같아요! -->
+            <Button Content="추가"
+                    Command="{Binding AddCommand}"
+                    Margin="10,0,0,0"
+                    Padding="20,5"
+                    FontSize="14"
+                    Background="#FF4CAF50"
+                    Foreground="White" />
+        </StackPanel>
+
+        <!-- ┌─────────────────────────────────────────┐ -->
+        <!-- │  상태 표시                               │ -->
+        <!-- └─────────────────────────────────────────┘ -->
+        <TextBlock DockPanel.Dock="Bottom"
+                   Text="{Binding StatusText}"
+                   FontSize="12"
+                   Foreground="Gray"
+                   Margin="0,10,0,0" />
+
+        <StackPanel DockPanel.Dock="Bottom"
+                    Orientation="Horizontal"
+                    Margin="0,10,0,0">
+            <Button Content="완료 항목 삭제"
+                    Command="{Binding ClearCompletedCommand}"
+                    Padding="15,5"
+                    Margin="0,0,10,0" />
+            <Button Content="전체 삭제"
+                    Command="{Binding ClearAllCommand}"
+                    Padding="15,5"
+                    Background="#FFF44336"
+                    Foreground="White" />
+        </StackPanel>
+
+        <!-- ┌─────────────────────────────────────────┐ -->
+        <!-- │  할 일 목록 (ListView + DataTemplate)    │ -->
+        <!-- └─────────────────────────────────────────┘ -->
+        <!-- ItemsSource: ViewModel의 TodoItems 컬렉션에 바인딩
+             SelectedItem: 선택된 항목을 ViewModel에 연결 -->
+        <ListView ItemsSource="{Binding TodoItems}"
+                  SelectedItem="{Binding SelectedItem}"
+                  Margin="0,5"
+                  BorderThickness="1"
+                  BorderBrush="#FFE0E0E0">
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <StackPanel Orientation="Horizontal" Margin="3">
+                        <!-- CheckBox를 IsCompleted에 바인딩 -->
+                        <CheckBox IsChecked="{Binding IsCompleted}"
+                                  VerticalAlignment="Center"
+                                  Margin="0,0,8,0" />
+                        <!-- 할 일 내용 표시 -->
+                        <TextBlock Text="{Binding Title}"
+                                   FontSize="14"
+                                   VerticalAlignment="Center">
+                            <TextBlock.Style>
+                                <!-- DataTrigger: 데이터 값에 따라 스타일 변경
+                                     IsCompleted가 True이면 취소선 + 회색 -->
+                                <Style TargetType="TextBlock">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsCompleted}" Value="True">
+                                            <Setter Property="TextDecorations" Value="Strikethrough" />
+                                            <Setter Property="Foreground" Value="Gray" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </StackPanel>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+    </DockPanel>
+</Window>

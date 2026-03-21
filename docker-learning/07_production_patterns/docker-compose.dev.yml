@@ -1,0 +1,159 @@
+# ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+# ■ 파일명: docker-compose.dev.yml
+# ■ 목적: 개발 환경용 Docker Compose 설정
+# ■ 설명: 핫 리로드, 디버그 포트, 소스 마운트, 느슨한 제한
+# ■ 실행: docker-compose -f docker-compose.dev.yml up -d
+# ■ 날짜: 2026-03-21
+# ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+# ── 개발 환경의 핵심 원칙 ──
+# 1. 빠른 피드백: 코드 수정 → 즉시 반영 (핫 리로드)
+# 2. 디버깅 편의: 디버그 포트 열어두기
+# 3. 접근성: 모든 포트 열어서 직접 접근 가능
+# 4. 느슨한 제한: 리소스 제한 최소화
+# 5. 상세 로그: 모든 로그 레벨 활성화
+
+services:
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # 웹 앱 (개발 모드)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  web:
+    image: python:3.12-slim                  # 빌드 없이 바로 사용
+    container_name: dev-web
+    # ── 개발 서버 실행 (핫 리로드 활성화) ──
+    # Flask의 debug=True → 코드 수정 시 자동 재시작!
+    command: >
+      bash -c "
+        pip install flask redis psycopg2-binary debugpy watchdog &&
+        python -m debugpy --listen 0.0.0.0:5678 --wait-for-client /app/app.py
+      "
+    # debugpy = Python 디버거 (VS Code에서 원격 디버깅)
+    # --wait-for-client = 디버거가 연결될 때까지 대기
+    # 실제 개발 시에는 --wait-for-client를 빼면 바로 시작돼
+
+    environment:
+      - APP_ENV=development                  # 개발 모드
+      - FLASK_DEBUG=1                        # Flask 디버그 모드 (핫 리로드!)
+      - LOG_LEVEL=DEBUG                      # 모든 로그 출력
+      - DATABASE_URL=postgresql://postgres:devpassword@db:5432/devdb
+      - REDIS_URL=redis://redis:6379/0
+
+    volumes:
+      # ── 소스코드 바인드 마운트 (핵심!) ──
+      # 호스트의 소스코드를 컨테이너에 실시간 연결
+      # 코드를 수정하면 컨테이너에 즉시 반영돼!
+      # 이미지를 다시 빌드할 필요 없어!
+      - ./src:/app                           # 소스코드 실시간 반영
+
+    ports:
+      - "8000:8000"                          # 앱 포트
+      - "5678:5678"                          # 디버그 포트 (VS Code Remote Debug)
+      # VS Code에서 디버거 연결하려면:
+      # launch.json에 다음을 추가:
+      # {
+      #   "name": "Docker Debug",
+      #   "type": "debugpy",
+      #   "request": "attach",
+      #   "host": "localhost",
+      #   "port": 5678,
+      #   "pathMappings": [{"localRoot": "${workspaceFolder}/src", "remoteRoot": "/app"}]
+      # }
+
+    depends_on:
+      - db
+      - redis
+    # 개발 환경에서는 단순 depends_on만 (condition 불필요)
+    # DB가 준비 안 돼도 앱을 시작하고, 연결 실패 시 에러 메시지로 확인
+
+    restart: "no"                            # 개발 환경에서는 재시작 안 함
+    # 에러가 나면 직접 확인하고 수정해야 하니까!
+
+    networks:
+      - dev-network
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # PostgreSQL (개발 모드)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  db:
+    image: postgres:16-alpine
+    container_name: dev-db
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=devpassword        # 개발용 간단한 비밀번호
+      - POSTGRES_DB=devdb
+    ports:
+      # ── 개발 환경에서는 DB 포트를 열어! ──
+      # DBeaver, pgAdmin 같은 GUI 도구로 직접 접속할 수 있어
+      - "5432:5432"                          # 호스트에서 직접 DB 접근 가능
+    volumes:
+      - dev-db-data:/var/lib/postgresql/data
+      # 초기화 SQL 스크립트
+      - ./init-dev.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    restart: "no"
+    networks:
+      - dev-network
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # Redis (개발 모드)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  redis:
+    image: redis:7-alpine
+    container_name: dev-redis
+    ports:
+      - "6379:6379"                          # 호스트에서 직접 접근 가능
+    # 개발 환경에서는 비밀번호 없이! (편의성)
+    # appendonly 끔 (빠른 재시작)
+    restart: "no"
+    networks:
+      - dev-network
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # Adminer (DB 관리 웹 도구)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # 개발 환경에서만 사용하는 DB 관리 도구!
+  # 프로덕션에서는 절대 넣으면 안 돼!
+  adminer:
+    image: adminer:latest                    # DB 관리 웹 UI
+    container_name: dev-adminer
+    ports:
+      - "8081:8080"                          # http://localhost:8081
+    environment:
+      - ADMINER_DEFAULT_SERVER=db            # 기본 DB 서버를 db로 설정
+    depends_on:
+      - db
+    restart: "no"
+    networks:
+      - dev-network
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # Redis Commander (Redis 관리 웹 도구)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: dev-redis-commander
+    ports:
+      - "8082:8081"                          # http://localhost:8082
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    depends_on:
+      - redis
+    restart: "no"
+    networks:
+      - dev-network
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# volumes
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+volumes:
+  dev-db-data:
+    driver: local
+    name: dev-db-data
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# networks
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+networks:
+  dev-network:
+    driver: bridge
+    name: dev-network

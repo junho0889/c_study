@@ -1,0 +1,162 @@
+# =============================================================================
+# Kubernetes 학습 04단계: PersistentVolume & PersistentVolumeClaim
+# =============================================================================
+# Pod는 "일회용 종이컵"과 같아서, 삭제하면 안의 데이터도 사라집니다.
+# PersistentVolume(PV)은 "텀블러"처럼 Pod가 없어져도 데이터를 보관합니다.
+#
+# 전체 흐름:
+#   StorageClass → PersistentVolume(PV) → PersistentVolumeClaim(PVC) → Pod
+#
+# 비유:
+#   StorageClass = 창고 유형 (냉장 창고, 일반 창고, 고급 창고)
+#   PV           = 실제 창고 공간 (관리자가 준비)
+#   PVC          = 창고 사용 신청서 (개발자가 요청)
+#   Pod          = 창고를 사용하는 사람
+# =============================================================================
+
+---
+# ─────────────────────────────────────────────
+# 1. StorageClass (저장소 유형 정의)
+# ─────────────────────────────────────────────
+# 어떤 종류의 저장소를 제공할지 정의합니다.
+# 비유: "이 학교에는 일반 사물함과 대형 사물함이 있습니다"라고 안내하는 것
+#
+# 클라우드 환경에서는 provisioner가 자동으로 PV를 만들어 줍니다.
+# 로컬 환경에서는 수동으로 PV를 만들어야 합니다.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: lesson-standard
+# provisioner: 실제 저장소를 만들어 주는 드라이버
+# - kubernetes.io/no-provisioner : 수동 (로컬 테스트용)
+# - kubernetes.io/aws-ebs       : AWS EBS 디스크
+# - kubernetes.io/gce-pd        : Google Cloud 디스크
+# - ebs.csi.aws.com             : AWS EBS CSI 드라이버
+provisioner: kubernetes.io/no-provisioner
+# reclaimPolicy: PVC가 삭제되면 PV를 어떻게 할지
+#   Retain : PV를 그대로 유지 (데이터 보존, 관리자가 수동 정리)
+#   Delete : PV와 저장소를 자동 삭제 (클라우드에서 주로 사용)
+#   비유: 세입자가 나가면 방을 비울지(Delete), 그대로 놔둘지(Retain)
+reclaimPolicy: Retain
+# volumeBindingMode: PVC와 PV를 언제 연결할지
+#   Immediate          : PVC 생성 즉시 연결
+#   WaitForFirstConsumer: Pod가 생성될 때 연결 (노드 위치 고려)
+volumeBindingMode: WaitForFirstConsumer
+
+---
+# ─────────────────────────────────────────────
+# 2. PersistentVolume (실제 저장 공간)
+# ─────────────────────────────────────────────
+# 클러스터 관리자가 미리 준비하는 저장 공간입니다.
+# 비유: 아파트 관리실에서 "101호 창고, 102호 창고"를 만들어 놓는 것
+#
+# 참고: 클라우드에서 StorageClass의 provisioner가 있으면
+#       PV를 직접 만들 필요 없이 PVC만 만들면 자동 생성됩니다 (동적 프로비저닝).
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: lesson-pv
+  labels:
+    type: local
+spec:
+  # storageClassName: 어떤 StorageClass에 속하는지
+  storageClassName: lesson-standard
+  # capacity: 저장 공간 크기
+  # 비유: 사물함 크기 지정
+  capacity:
+    storage: 1Gi       # 1기가바이트
+  # accessModes: 접근 방식
+  #   ReadWriteOnce (RWO) : 하나의 노드에서만 읽기/쓰기 가능
+  #   ReadOnlyMany  (ROX) : 여러 노드에서 읽기 가능
+  #   ReadWriteMany (RWX) : 여러 노드에서 읽기/쓰기 가능
+  #
+  # 비유:
+  #   RWO = 혼자 쓰는 개인 사물함
+  #   ROX = 전시장 유리장 (여러 명이 볼 수만 있음)
+  #   RWX = 공유 화이트보드 (여러 명이 쓸 수 있음)
+  accessModes:
+    - ReadWriteOnce
+  # hostPath: 노드(호스트)의 디렉터리를 직접 사용 (테스트용)
+  # 운영 환경에서는 NFS, AWS EBS, Ceph 등을 사용합니다.
+  hostPath:
+    path: /tmp/lesson-pv-data
+    type: DirectoryOrCreate   # 디렉터리가 없으면 자동 생성
+
+---
+# ─────────────────────────────────────────────
+# 3. PersistentVolumeClaim (저장 공간 요청)
+# ─────────────────────────────────────────────
+# 개발자가 "이만큼의 저장 공간이 필요합니다"라고 요청하는 것입니다.
+# 비유: "500MB짜리 사물함 하나 신청합니다"라는 신청서
+#
+# Kubernetes가 조건에 맞는 PV를 찾아서 연결(바인딩)합니다.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lesson-pvc
+spec:
+  storageClassName: lesson-standard
+  accessModes:
+    - ReadWriteOnce
+  # 요청하는 저장 공간 크기
+  # PV의 capacity보다 작거나 같아야 합니다.
+  resources:
+    requests:
+      storage: 500Mi    # 500메가바이트 요청
+
+---
+# ─────────────────────────────────────────────
+# 4. PVC를 사용하는 Pod
+# ─────────────────────────────────────────────
+apiVersion: v1
+kind: Pod
+metadata:
+  name: lesson-volume-pod
+  labels:
+    app: lesson-web
+spec:
+  containers:
+    - name: lesson-app
+      image: python:3.12-slim
+      command: ["sh", "-c"]
+      args:
+        - |
+          echo "데이터 저장 테스트" > /app/data/test.txt
+          echo "파일이 저장되었습니다:"
+          cat /app/data/test.txt
+          echo "Pod를 삭제하고 다시 만들어도 이 파일은 남아 있습니다!"
+          sleep 3600
+      # ┌──────────────────────────────────────────┐
+      # │  volumeMounts: 컨테이너 안의 마운트 경로  │
+      # └──────────────────────────────────────────┘
+      # PVC를 컨테이너의 특정 경로에 연결합니다.
+      # 비유: 사물함(PVC)을 교실 책상 옆에 가져다 놓는 것
+      volumeMounts:
+        - name: data-volume
+          mountPath: /app/data    # 이 경로에 PV 데이터가 보입니다
+
+  # volumes: Pod 수준에서 볼륨을 선언합니다.
+  volumes:
+    - name: data-volume
+      persistentVolumeClaim:
+        claimName: lesson-pvc     # 위에서 만든 PVC 이름
+
+# =============================================================================
+# 사용 방법:
+#   kubectl apply -f persistent-volume.yaml
+#
+# 상태 확인:
+#   kubectl get storageclass     ← StorageClass 목록
+#   kubectl get pv               ← PersistentVolume 목록 (STATUS: Available → Bound)
+#   kubectl get pvc              ← PersistentVolumeClaim 목록 (STATUS: Bound)
+#
+# 데이터 영속성 테스트:
+#   1. kubectl exec lesson-volume-pod -- cat /app/data/test.txt
+#   2. kubectl delete pod lesson-volume-pod
+#   3. kubectl apply -f persistent-volume.yaml   ← Pod 재생성
+#   4. kubectl exec lesson-volume-pod -- cat /app/data/test.txt
+#      → 파일이 그대로 남아 있습니다!
+#
+# PV/PVC 상태 흐름:
+#   Available → Bound → Released → (Retain: 수동 정리 / Delete: 자동 삭제)
+# =============================================================================

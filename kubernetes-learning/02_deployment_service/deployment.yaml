@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lesson-web-deployment
+spec:
+  # replicas는 같은 파드를 몇 개 유지할지 뜻합니다.
+  # 의자를 2개 놓아 두면 한 명이 빠져도 다른 한 명이 계속 앉아 있는 것과 비슷합니다.
+  replicas: 2
+  selector:
+    matchLabels:
+      app: lesson-web
+  template:
+    metadata:
+      labels:
+        # selector와 template label이 맞아야 Deployment가 자기 파드를 찾습니다.
+        app: lesson-web
+    spec:
+      containers:
+        - name: lesson-web
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80

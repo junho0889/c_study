@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: lesson-web-service
+spec:
+  selector:
+    # app=lesson-web 라벨을 가진 파드들에게 이 Service가 트래픽을 보냅니다.
+    app: lesson-web
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+  # ClusterIP는 클러스터 안에서만 쓰는 기본 서비스 타입입니다.
+  type: ClusterIP

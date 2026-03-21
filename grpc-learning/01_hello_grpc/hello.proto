@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package lesson.hello;
+
+// proto 파일은 gRPC의 "약속 종이"입니다.
+// 클라이언트와 서버가 서로 멋대로 말하지 않고,
+// 어떤 모양의 요청과 응답을 주고받을지 먼저 정해 둡니다.
+
+message HelloRequest {
+  // field 번호 1은 이 값의 자리표 같은 것입니다.
+  // 나중에 다른 언어 코드로 바뀌어도 이 번호를 보고 같은 칸이라는 것을 맞춥니다.
+  string name = 1;
+}
+
+message HelloReply {
+  string message = 1;
+}
+
+service HelloService {
+  // unary RPC 예제:
+  // 요청 1개를 보내면 응답 1개를 돌려받습니다.
+  rpc SayHello(HelloRequest) returns (HelloReply);
+}

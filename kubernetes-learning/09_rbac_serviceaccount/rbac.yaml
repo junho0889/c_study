@@ -1,0 +1,198 @@
+# =============================================================================
+# Kubernetes 학습 09단계: RBAC (Role-Based Access Control)
+# =============================================================================
+# RBAC는 "누가(Who) 무엇을(What) 할 수 있는지(Action)"를 정하는 권한 시스템입니다.
+#
+# 비유: 학교의 출입 권한 관리
+#   - 학생(ServiceAccount)은 교실(Pod)에 들어갈 수 있지만 교무실(Secret)은 못 들어감
+#   - 선생님(ServiceAccount)은 교무실에도 들어갈 수 있음
+#   - 교장(ClusterRole)은 모든 곳에 접근 가능
+#
+# RBAC의 4가지 핵심 리소스:
+#   1. Role           : 네임스페이스 안에서의 권한 규칙
+#   2. ClusterRole    : 클러스터 전체에서의 권한 규칙
+#   3. RoleBinding    : 사용자/그룹에게 Role을 부여
+#   4. ClusterRoleBinding : 사용자/그룹에게 ClusterRole을 부여
+# =============================================================================
+
+---
+# ─────────────────────────────────────────────
+# 1. 네임스페이스 생성
+# ─────────────────────────────────────────────
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lesson-rbac
+
+---
+# ─────────────────────────────────────────────
+# 2. Role (네임스페이스 범위 권한)
+# ─────────────────────────────────────────────
+# 특정 네임스페이스 안에서만 적용되는 권한 규칙입니다.
+# 비유: "3반 교실 안에서 할 수 있는 일" 목록
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: lesson-pod-reader
+  namespace: lesson-rbac
+rules:
+  # ┌──────────────────────────────────────────┐
+  # │  rules: 어떤 리소스에 어떤 동작을 허용?   │
+  # └──────────────────────────────────────────┘
+  - apiGroups: [""]       # "" = 코어 API 그룹 (Pod, Service 등)
+    # resources: 접근 가능한 리소스 종류
+    resources: ["pods"]
+    # verbs: 허용되는 동작 (행위)
+    #   get    : 개별 조회   (kubectl get pod <이름>)
+    #   list   : 목록 조회   (kubectl get pods)
+    #   watch  : 실시간 감시 (kubectl get pods --watch)
+    #   create : 생성        (kubectl create)
+    #   update : 수정        (kubectl apply)
+    #   patch  : 부분 수정   (kubectl patch)
+    #   delete : 삭제        (kubectl delete)
+    #
+    # 비유: 도서관 이용 규칙
+    #   get/list/watch = "책을 보고 읽을 수 있다" (읽기 전용)
+    #   create/update  = "책을 추가하고 수정할 수 있다" (쓰기)
+    #   delete         = "책을 폐기할 수 있다" (삭제)
+    verbs: ["get", "list", "watch"]   # 읽기만 허용!
+
+  # Pod 로그를 볼 수 있는 권한 (kubectl logs)
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+
+---
+# ─────────────────────────────────────────────
+# 3. Role - 더 넓은 권한 (개발자용)
+# ─────────────────────────────────────────────
+# 비유: "3반 교실에서 게시판 관리까지 할 수 있는 반장 권한"
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: lesson-developer
+  namespace: lesson-rbac
+rules:
+  # Pod 관련 전체 권한
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "pods/exec"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+
+  # Service 관련 전체 권한
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+
+  # Deployment 관련 전체 권한
+  - apiGroups: ["apps"]       # apps API 그룹 (Deployment, StatefulSet 등)
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+
+  # ConfigMap 읽기 권한
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+
+  # Secret은 접근 불가! (명시하지 않으면 기본 거부)
+  # 비유: "반장이라도 교무실 서류(Secret)는 열어볼 수 없다"
+
+---
+# ─────────────────────────────────────────────
+# 4. ClusterRole (클러스터 전체 범위 권한)
+# ─────────────────────────────────────────────
+# 모든 네임스페이스에 걸쳐 적용되는 권한입니다.
+# 비유: "모든 교실을 순찰할 수 있는 순찰 선생님 권한"
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: lesson-cluster-viewer
+rules:
+  # 모든 네임스페이스의 Pod, Service, Deployment를 볼 수 있음
+  - apiGroups: ["", "apps"]
+    resources: ["pods", "services", "deployments"]
+    verbs: ["get", "list", "watch"]
+
+  # 노드 정보 조회 (네임스페이스에 속하지 않는 리소스)
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list"]
+
+  # 네임스페이스 목록 조회
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+
+---
+# ─────────────────────────────────────────────
+# 5. RoleBinding (역할 부여 - 네임스페이스 범위)
+# ─────────────────────────────────────────────
+# ServiceAccount에 Role을 부여합니다.
+# 비유: "김학생에게 반장 권한을 부여합니다"
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: lesson-dev-binding
+  namespace: lesson-rbac
+subjects:
+  # ┌──────────────────────────────────────────┐
+  # │  subjects: 누구에게 권한을 줄 것인가?     │
+  # └──────────────────────────────────────────┘
+  # kind 옵션:
+  #   ServiceAccount : Pod가 사용하는 계정
+  #   User           : 사람 사용자
+  #   Group          : 사용자 그룹
+  - kind: ServiceAccount
+    name: lesson-dev-sa         # ServiceAccount 이름
+    namespace: lesson-rbac
+
+roleRef:
+  # ┌──────────────────────────────────────────┐
+  # │  roleRef: 어떤 Role을 부여할 것인가?      │
+  # └──────────────────────────────────────────┘
+  kind: Role
+  name: lesson-developer        # 위에서 만든 Role 이름
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# ─────────────────────────────────────────────
+# 6. ClusterRoleBinding (역할 부여 - 클러스터 범위)
+# ─────────────────────────────────────────────
+# 비유: "박 선생님에게 전체 학교 순찰 권한을 부여합니다"
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: lesson-viewer-binding
+subjects:
+  - kind: ServiceAccount
+    name: lesson-viewer-sa
+    namespace: lesson-rbac
+roleRef:
+  kind: ClusterRole
+  name: lesson-cluster-viewer
+  apiGroup: rbac.authorization.k8s.io
+
+# =============================================================================
+# 최소 권한 원칙 (Principle of Least Privilege):
+# ─────────────────────────────────────────────────
+# "꼭 필요한 권한만 부여하라!"
+#
+# 비유: 금고 열쇠를 모든 직원에게 나눠주면 안 됩니다.
+#       금고를 열어야 하는 직원에게만 열쇠를 줘야 합니다.
+#
+# 실전 가이드:
+#   1. 기본적으로 아무 권한도 주지 않기 (기본 거부)
+#   2. 필요한 권한만 최소한으로 부여
+#   3. ClusterRole보다 Role을 우선 사용 (범위 제한)
+#   4. wildcard(*)는 가급적 사용하지 않기
+#   5. Secret 접근 권한은 특히 신중하게 부여
+#
+# 사용 방법:
+#   kubectl apply -f rbac.yaml
+#   kubectl get roles -n lesson-rbac
+#   kubectl get rolebindings -n lesson-rbac
+#   kubectl get clusterroles | grep lesson
+#
+# 권한 테스트:
+#   kubectl auth can-i get pods -n lesson-rbac --as=system:serviceaccount:lesson-rbac:lesson-dev-sa
+#   kubectl auth can-i delete secrets -n lesson-rbac --as=system:serviceaccount:lesson-rbac:lesson-dev-sa
+# =============================================================================

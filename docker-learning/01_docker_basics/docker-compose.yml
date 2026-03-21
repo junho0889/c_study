@@ -1,0 +1,131 @@
+# ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+# ■ 파일명: docker-compose.yml
+# ■ 목적: Docker Compose 기초 - 웹 앱 + Redis 구성
+# ■ 설명: 두 개의 컨테이너를 함께 실행하는 가장 기본적인 예제
+# ■ 실행: docker-compose up -d
+# ■ 날짜: 2026-03-21
+# ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+# ── version은 더 이상 필요 없어 ──
+# Docker Compose v2부터는 version 필드를 안 써도 돼
+# 예전에는 "version: '3.8'" 이렇게 썼는데, 이제는 자동 인식해
+
+# ── services: 실행할 컨테이너 목록 ──
+# 각 서비스 = 하나의 컨테이너
+# 서비스 이름(web, redis)이 곧 DNS 이름이야
+# web 컨테이너에서 redis 컨테이너에 접근할 때 "redis"라는 이름을 사용해
+services:
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # 서비스 1: 웹 애플리케이션
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  web:
+    # ── build: 이미지를 직접 만들겠다 ──
+    # context = Dockerfile이 있는 디렉토리 경로
+    # dockerfile = 사용할 Dockerfile 이름 (기본값: Dockerfile)
+    build:
+      context: .                    # 현재 디렉토리에서 빌드해
+      dockerfile: Dockerfile        # 이 이름의 Dockerfile을 사용해
+      args:                         # 빌드 시 전달할 ARG 값
+        APP_VERSION: "1.0.0"        # Dockerfile의 ARG APP_VERSION에 전달
+
+    # ── image: 빌드된 이미지에 이름 붙이기 ──
+    # build와 함께 쓰면 빌드된 이미지에 이 이름을 붙여줘
+    image: docker-learning-web:latest
+
+    # ── container_name: 컨테이너 이름 고정 ──
+    # 이걸 안 쓰면 "폴더명_서비스명_1" 같은 이름이 자동으로 붙어
+    container_name: learning-web
+
+    # ── ports: 포트 연결 ──
+    # "호스트포트:컨테이너포트" 형태
+    # 8000:8000 → 내 컴퓨터의 8000번 포트를 컨테이너의 8000번 포트에 연결
+    # 브라우저에서 http://localhost:8000 으로 접속할 수 있어
+    ports:
+      - "8000:8000"                 # 호스트 8000 → 컨테이너 8000
+
+    # ── environment: 환경변수 설정 ──
+    # 컨테이너 안에서 사용할 수 있는 변수들이야
+    # 코드에서 os.getenv("REDIS_HOST")로 읽을 수 있어
+    environment:
+      - REDIS_HOST=redis            # Redis 서비스 이름 (DNS로 자동 해석)
+      - APP_PORT=8000               # 앱이 사용할 포트
+      - APP_ENV=development         # 앱 실행 환경
+
+    # ── depends_on: 실행 순서 지정 ──
+    # "redis가 먼저 시작된 다음에 web을 시작해줘"라는 뜻
+    # 단, 컨테이너 '시작'만 보장하지 '준비 완료'는 보장하지 않아
+    # 준비 완료까지 기다리려면 condition을 써야 해
+    depends_on:
+      redis:
+        condition: service_healthy  # redis의 healthcheck가 통과할 때까지 기다려
+
+    # ── restart: 재시작 정책 ──
+    # no = 재시작 안 함 (기본값)
+    # always = 항상 재시작
+    # on-failure = 오류로 종료될 때만 재시작
+    # unless-stopped = 수동으로 멈추지 않는 한 항상 재시작
+    restart: unless-stopped
+
+    # ── networks: 연결할 네트워크 ──
+    # 같은 네트워크에 있는 컨테이너끼리만 통신할 수 있어
+    networks:
+      - app-network                 # app-network에 연결
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # 서비스 2: Redis (데이터 저장소)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  redis:
+    # ── image: Docker Hub에서 가져올 이미지 ──
+    # build 대신 image만 쓰면 Docker Hub에서 이미지를 다운로드해
+    # redis:7-alpine = Redis 7 버전의 Alpine 리눅스 기반 (아주 작아!)
+    image: redis:7-alpine
+
+    # 컨테이너 이름 고정
+    container_name: learning-redis
+
+    # ── ports ──
+    # Redis 기본 포트는 6379
+    # 호스트에서도 접근하고 싶을 때만 포트를 열어
+    ports:
+      - "6379:6379"                 # Redis 기본 포트
+
+    # ── volumes: 데이터 저장소 연결 ──
+    # 컨테이너가 삭제되어도 데이터를 보존하고 싶을 때 사용해
+    # redis-data:/data → "redis-data"라는 이름의 볼륨을 컨테이너의 /data에 연결
+    volumes:
+      - redis-data:/data            # Redis 데이터를 볼륨에 저장
+
+    # ── healthcheck: 건강 확인 ──
+    # Docker가 주기적으로 이 명령어를 실행해서 컨테이너가 잘 동작하는지 확인해
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]   # redis-cli ping으로 확인
+      interval: 10s                         # 10초마다 확인
+      timeout: 5s                           # 5초 안에 응답 없으면 실패
+      retries: 3                            # 3번 실패하면 unhealthy
+      start_period: 5s                      # 시작 후 5초는 기다려줘
+
+    # 재시작 정책
+    restart: unless-stopped
+
+    # 네트워크 연결
+    networks:
+      - app-network
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# volumes: 볼륨 정의
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 여기서 사용할 볼륨을 선언해야 해
+# 볼륨은 컨테이너와 독립적으로 존재하는 데이터 저장소야
+volumes:
+  redis-data:                       # Redis 데이터 저장용 볼륨
+    driver: local                   # 로컬 디스크에 저장 (기본값)
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# networks: 네트워크 정의
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 컨테이너들이 통신할 수 있는 가상 네트워크를 만들어
+networks:
+  app-network:                      # 앱 전용 네트워크
+    driver: bridge                  # bridge = 기본 네트워크 드라이버
+    # bridge 네트워크: 같은 호스트의 컨테이너끼리 통신

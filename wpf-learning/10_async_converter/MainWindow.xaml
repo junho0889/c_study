@@ -1,0 +1,182 @@
+<Window x:Class="LessonWpf.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:LessonWpf"
+        Title="WPF 단위 변환기 - Converter &amp; Async"
+        Height="550"
+        Width="600"
+        WindowStartupLocation="CenterScreen">
+    <!--
+    ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+    ■  WPF 10 - 값 변환기와 비동기 작업                      ■
+    ■  단위 변환기 + 비동기 검증 만들기                        ■
+    ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+    이 파일에서 배우는 것:
+      1) IValueConverter      - 값을 변환하는 통역사 (원→달러)
+      2) IMultiValueConverter - 여러 값을 조합하는 통역사
+      3) async/await in WPF  - 비동기 작업 (기다리면서 다른 일)
+      4) Task 패턴            - 무거운 작업을 백그라운드에서 처리
+
+    비유:
+      IValueConverter = 통역사
+        한국어(데이터)를 영어(화면 표시)로 바꿔줍니다.
+        예: 온도 30 → "30°C", true → "활성", 빨강 → "위험"
+    -->
+
+    <Window.DataContext>
+        <local:ConverterViewModel />
+    </Window.DataContext>
+
+    <Window.Resources>
+        <!-- ┌─────────────────────────────────────────┐ -->
+        <!-- │  Converter 등록                          │ -->
+        <!-- └─────────────────────────────────────────┘ -->
+        <!-- Converter를 Resource로 등록하면 XAML에서 사용 가능 -->
+        <local:CelsiusToFahrenheitConverter x:Key="TempConverter" />
+        <local:KmToMilesConverter x:Key="DistConverter" />
+        <local:KgToLbsConverter x:Key="WeightConverter" />
+        <local:BoolToTextConverter x:Key="BoolTextConverter" />
+        <local:NumberToColorConverter x:Key="NumColorConverter" />
+
+        <!-- MultiValueConverter -->
+        <local:BmiCalculatorConverter x:Key="BmiConverter" />
+    </Window.Resources>
+
+    <DockPanel Margin="15">
+        <TextBlock DockPanel.Dock="Top"
+                   Text="단위 변환기"
+                   FontSize="22" FontWeight="Bold"
+                   Margin="0,0,0,15" />
+
+        <ScrollViewer>
+            <StackPanel>
+                <!-- ┌─────────────────────────────────┐ -->
+                <!-- │  1. 온도 변환 (IValueConverter)   │ -->
+                <!-- └─────────────────────────────────┘ -->
+                <TextBlock Text="1. 온도 변환 (°C → °F)"
+                           FontSize="15" FontWeight="Bold"
+                           Margin="0,0,0,5" />
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                    <TextBox Text="{Binding CelsiusValue, UpdateSourceTrigger=PropertyChanged}"
+                             Width="100" FontSize="14" Padding="5" />
+                    <TextBlock Text=" °C  =  " FontSize="14"
+                               VerticalAlignment="Center" Margin="8,0" />
+                    <!-- Converter가 섭씨를 화씨로 변환! 통역사가 번역하듯! -->
+                    <TextBlock Text="{Binding CelsiusValue, Converter={StaticResource TempConverter}}"
+                               FontSize="14" FontWeight="Bold"
+                               Foreground="#FFE53935"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+
+                <!-- ┌─────────────────────────────────┐ -->
+                <!-- │  2. 거리 변환                     │ -->
+                <!-- └─────────────────────────────────┘ -->
+                <TextBlock Text="2. 거리 변환 (km → miles)"
+                           FontSize="15" FontWeight="Bold"
+                           Margin="0,0,0,5" />
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                    <TextBox Text="{Binding KmValue, UpdateSourceTrigger=PropertyChanged}"
+                             Width="100" FontSize="14" Padding="5" />
+                    <TextBlock Text=" km  =  " FontSize="14"
+                               VerticalAlignment="Center" Margin="8,0" />
+                    <TextBlock Text="{Binding KmValue, Converter={StaticResource DistConverter}}"
+                               FontSize="14" FontWeight="Bold"
+                               Foreground="#FF1E88E5"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+
+                <!-- ┌─────────────────────────────────┐ -->
+                <!-- │  3. 무게 변환                     │ -->
+                <!-- └─────────────────────────────────┘ -->
+                <TextBlock Text="3. 무게 변환 (kg → lbs)"
+                           FontSize="15" FontWeight="Bold"
+                           Margin="0,0,0,5" />
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                    <TextBox Text="{Binding KgValue, UpdateSourceTrigger=PropertyChanged}"
+                             Width="100" FontSize="14" Padding="5" />
+                    <TextBlock Text=" kg  =  " FontSize="14"
+                               VerticalAlignment="Center" Margin="8,0" />
+                    <TextBlock Text="{Binding KgValue, Converter={StaticResource WeightConverter}}"
+                               FontSize="14" FontWeight="Bold"
+                               Foreground="#FF43A047"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+
+                <!-- ┌─────────────────────────────────┐ -->
+                <!-- │  4. Bool → 텍스트 변환            │ -->
+                <!-- └─────────────────────────────────┘ -->
+                <TextBlock Text="4. Bool → 텍스트 (Converter)"
+                           FontSize="15" FontWeight="Bold"
+                           Margin="0,0,0,5" />
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                    <CheckBox IsChecked="{Binding IsActive}"
+                              Content="활성화" FontSize="14"
+                              VerticalAlignment="Center" />
+                    <TextBlock Margin="15,0,0,0" FontSize="14"
+                               VerticalAlignment="Center">
+                        상태: <Run Text="{Binding IsActive, Converter={StaticResource BoolTextConverter}}"
+                                  FontWeight="Bold" />
+                    </TextBlock>
+                </StackPanel>
+                <!-- 숫자에 따른 색상 변환 -->
+                <StackPanel Orientation="Horizontal" Margin="0,5,0,15">
+                    <TextBlock Text="점수:" FontSize="14" VerticalAlignment="Center" />
+                    <TextBox Text="{Binding ScoreValue, UpdateSourceTrigger=PropertyChanged}"
+                             Width="60" FontSize="14" Padding="5" Margin="8,0" />
+                    <Border Width="80" Height="30" CornerRadius="4"
+                            Background="{Binding ScoreValue, Converter={StaticResource NumColorConverter}}">
+                        <TextBlock Text="{Binding ScoreValue}"
+                                   Foreground="White" FontWeight="Bold"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
+                    </Border>
+                </StackPanel>
+
+                <!-- ┌─────────────────────────────────┐ -->
+                <!-- │  5. MultiValueConverter (BMI)    │ -->
+                <!-- └─────────────────────────────────┘ -->
+                <TextBlock Text="5. BMI 계산 (IMultiValueConverter)"
+                           FontSize="15" FontWeight="Bold"
+                           Margin="0,0,0,5" />
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                    <TextBlock Text="키(cm):" FontSize="14" VerticalAlignment="Center" />
+                    <TextBox Text="{Binding HeightCm, UpdateSourceTrigger=PropertyChanged}"
+                             Width="70" FontSize="14" Padding="5" Margin="8,0" />
+                    <TextBlock Text="몸무게(kg):" FontSize="14" VerticalAlignment="Center" />
+                    <TextBox Text="{Binding WeightKg, UpdateSourceTrigger=PropertyChanged}"
+                             Width="70" FontSize="14" Padding="5" Margin="8,0" />
+                </StackPanel>
+                <!-- MultiBinding: 여러 값을 한꺼번에 Converter에 전달 -->
+                <TextBlock FontSize="14" FontWeight="Bold" Margin="0,5,0,15">
+                    <TextBlock.Text>
+                        <MultiBinding Converter="{StaticResource BmiConverter}">
+                            <Binding Path="HeightCm" />
+                            <Binding Path="WeightKg" />
+                        </MultiBinding>
+                    </TextBlock.Text>
+                </TextBlock>
+
+                <!-- ┌─────────────────────────────────┐ -->
+                <!-- │  6. 비동기 검증 (async/await)     │ -->
+                <!-- └─────────────────────────────────┘ -->
+                <TextBlock Text="6. 비동기 검증 (async/await)"
+                           FontSize="15" FontWeight="Bold"
+                           Margin="0,0,0,5" />
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                    <TextBox Text="{Binding AsyncInput, UpdateSourceTrigger=PropertyChanged}"
+                             Width="200" FontSize="14" Padding="5" />
+                    <Button Content="서버 검증 (시뮬레이션)"
+                            Command="{Binding ValidateCommand}"
+                            Padding="15,5" Margin="10,0,0,0" />
+                </StackPanel>
+                <TextBlock Text="{Binding ValidationResult}"
+                           FontSize="14" Margin="0,5,0,5"
+                           Foreground="{Binding ValidationColor}" />
+                <!-- 로딩 표시 -->
+                <ProgressBar IsIndeterminate="{Binding IsValidating}"
+                             Height="4" Margin="0,0,0,10" />
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

@@ -1,0 +1,163 @@
+# =============================================================================
+# Kubernetes 학습 05단계: NetworkPolicy (네트워크 정책)
+# =============================================================================
+# 기본적으로 Kubernetes의 모든 Pod는 서로 통신할 수 있습니다.
+# NetworkPolicy는 "누가 누구에게 말할 수 있는지" 규칙을 정합니다.
+#
+# 비유: 학교에서 수업 시간에는 아무나 다른 교실에 갈 수 없게
+#       "출입 허가증"을 만드는 것과 같습니다.
+#       - "3반 학생만 과학실에 갈 수 있다" (ingress 규칙)
+#       - "1반 학생은 도서관만 갈 수 있다" (egress 규칙)
+#
+# 전제 조건: 네트워크 플러그인이 NetworkPolicy를 지원해야 합니다.
+#   지원: Calico, Cilium, Weave Net
+#   미지원: Flannel (기본값)
+# =============================================================================
+
+---
+# ─────────────────────────────────────────────
+# 1. 기본 정책: 모든 들어오는 트래픽 차단
+# ─────────────────────────────────────────────
+# 보안의 기본 원칙: "기본적으로 모두 차단하고, 필요한 것만 허용"
+# 비유: 학교 정문을 잠그고, 학생증이 있는 사람만 통과시키는 것
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lesson-deny-all-ingress
+spec:
+  # podSelector: 이 정책이 적용될 Pod를 선택합니다.
+  # 비어 있으면 네임스페이스의 모든 Pod에 적용됩니다.
+  podSelector: {}   # 모든 Pod에 적용
+
+  # policyTypes: 어떤 방향의 트래픽을 제어할지
+  #   Ingress: 들어오는 트래픽
+  #   Egress : 나가는 트래픽
+  policyTypes:
+    - Ingress       # 들어오는 트래픽만 제어
+
+  # ingress 규칙이 비어 있으면 = 모든 들어오는 트래픽 차단!
+  # 비유: 출입 허가 목록이 비어 있으면 아무도 못 들어옵니다.
+  # ingress: []   # 명시적으로 빈 배열을 적어도 됩니다.
+
+---
+# ─────────────────────────────────────────────
+# 2. 특정 Pod에서만 접근 허용
+# ─────────────────────────────────────────────
+# DB Pod에 접근할 수 있는 Pod를 제한합니다.
+# 비유: "교무실(DB)은 선생님(app=web 라벨을 가진 Pod)만 출입 가능"
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lesson-allow-web-to-db
+spec:
+  # 이 정책이 적용될 Pod: app=db 라벨을 가진 Pod (DB 서버)
+  podSelector:
+    matchLabels:
+      app: lesson-db
+
+  policyTypes:
+    - Ingress
+
+  ingress:
+    # ┌──────────────────────────────────────────┐
+    # │  from: 누구로부터 접근을 허용할지          │
+    # └──────────────────────────────────────────┘
+    - from:
+        # podSelector: 같은 네임스페이스에서 라벨이 일치하는 Pod만 허용
+        - podSelector:
+            matchLabels:
+              app: lesson-web    # app=lesson-web 라벨을 가진 Pod만!
+
+      # ports: 어떤 포트로의 접근을 허용할지
+      ports:
+        - protocol: TCP
+          port: 5432             # PostgreSQL 기본 포트만 허용
+
+---
+# ─────────────────────────────────────────────
+# 3. 네임스페이스 기반 접근 제어
+# ─────────────────────────────────────────────
+# 특정 네임스페이스에서 오는 트래픽만 허용합니다.
+# 비유: "우리 학교 학생만 들어올 수 있다" (다른 학교 학생은 차단)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lesson-allow-from-namespace
+spec:
+  podSelector:
+    matchLabels:
+      app: lesson-web
+
+  policyTypes:
+    - Ingress
+
+  ingress:
+    - from:
+        # namespaceSelector: 특정 라벨을 가진 네임스페이스에서만 허용
+        - namespaceSelector:
+            matchLabels:
+              environment: production   # production 라벨이 있는 NS만
+
+        # IP 블록으로 허용 (외부 서비스 접근 시)
+        - ipBlock:
+            cidr: 10.0.0.0/8           # 10.x.x.x 대역 허용
+            except:
+              - 10.0.1.0/24            # 단, 10.0.1.x 대역은 제외
+
+      ports:
+        - protocol: TCP
+          port: 80
+
+---
+# ─────────────────────────────────────────────
+# 4. Egress (나가는 트래픽) 제어
+# ─────────────────────────────────────────────
+# Pod가 외부로 보내는 트래픽을 제한합니다.
+# 비유: "학생은 교실(내부)과 도서관(DNS)만 갈 수 있고, 밖에 나갈 수 없다"
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lesson-restrict-egress
+spec:
+  podSelector:
+    matchLabels:
+      app: lesson-web
+
+  policyTypes:
+    - Egress
+
+  egress:
+    # DNS 서버 접근은 항상 허용해야 합니다!
+    # 비유: 전화번호부(DNS)를 볼 수 없으면 아무에게도 전화할 수 없습니다.
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53       # DNS
+        - protocol: TCP
+          port: 53       # DNS (TCP fallback)
+
+    # DB 서비스로만 나가는 트래픽 허용
+    - to:
+        - podSelector:
+            matchLabels:
+              app: lesson-db
+      ports:
+        - protocol: TCP
+          port: 5432
+
+# =============================================================================
+# 사용 방법:
+#   kubectl apply -f network-policy.yaml
+#   kubectl get networkpolicy
+#   kubectl describe networkpolicy lesson-allow-web-to-db
+#
+# 테스트 (web Pod에서 db Pod로 접근):
+#   kubectl exec lesson-web-pod -- curl db-service:5432   ← 성공해야 함
+#   kubectl exec other-pod -- curl db-service:5432        ← 차단되어야 함
+#
+# 주의사항:
+#   - NetworkPolicy가 없는 Pod는 모든 트래픽이 허용됩니다.
+#   - NetworkPolicy를 하나라도 적용하면, 명시적으로 허용하지 않은
+#     트래픽은 모두 차단됩니다.
+#   - DNS(53번 포트) 접근은 거의 항상 허용해야 합니다.
+# =============================================================================

@@ -1,0 +1,149 @@
+<Window x:Class="LessonWpf.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="WPF 레이아웃 패널 - 계산기"
+        Height="500"
+        Width="350"
+        WindowStartupLocation="CenterScreen">
+    <!--
+    ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+    ■  WPF 03 - 레이아웃 패널 (Layout Panels)                ■
+    ■  계산기 레이아웃 만들기                                  ■
+    ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+    이 파일에서 배우는 것:
+      1) StackPanel  - 세로/가로로 차곡차곡 쌓기 (블록 쌓기)
+      2) Grid        - 행/열로 나눈 바둑판 배치 (엑셀 시트)
+      3) DockPanel   - 상하좌우 가장자리에 붙이기 (자석)
+      4) WrapPanel   - 자동 줄 바꿈 (글자처럼 줄 바꿈)
+      5) Canvas      - 자유 좌표 배치 (도화지에 자유롭게)
+      6) Margin      - 바깥 여백 (내 몸과 벽 사이 거리)
+      7) Padding     - 안쪽 여백 (상자 안의 쿠션)
+    -->
+
+    <!-- ┌─────────────────────────────────────────────┐ -->
+    <!-- │  DockPanel - 가장 바깥 레이아웃              │ -->
+    <!-- └─────────────────────────────────────────────┘ -->
+    <!-- DockPanel은 자석처럼 컨트롤을 상/하/좌/우에 붙입니다.
+         냉장고에 자석으로 메모지를 붙이는 것과 같아요!
+         DockPanel.Dock="Top" → 위쪽에 붙음
+         마지막 자식은 남은 공간을 모두 채웁니다. -->
+    <DockPanel>
+
+        <!-- ┌─────────────────────────────────────────┐ -->
+        <!-- │  상단: 디스플레이 영역 (StackPanel)      │ -->
+        <!-- └─────────────────────────────────────────┘ -->
+        <!-- StackPanel은 블록을 쌓듯이 위에서 아래로 (또는 옆으로) 배치합니다.
+             레고 블록을 차곡차곡 쌓는 것과 같아요! -->
+        <Border DockPanel.Dock="Top"
+                Background="#FF1E1E2E"
+                Padding="15"
+                Margin="5">
+            <StackPanel>
+                <!-- 계산 수식 표시 -->
+                <TextBlock x:Name="FormulaText"
+                           Text="0"
+                           FontSize="16"
+                           Foreground="Gray"
+                           HorizontalAlignment="Right" />
+                <!-- 결과 표시 -->
+                <TextBlock x:Name="ResultText"
+                           Text="0"
+                           FontSize="36"
+                           FontWeight="Bold"
+                           Foreground="White"
+                           HorizontalAlignment="Right"
+                           Margin="0,5,0,0" />
+            </StackPanel>
+        </Border>
+
+        <!-- ┌─────────────────────────────────────────┐ -->
+        <!-- │  하단: 상태 표시줄                       │ -->
+        <!-- └─────────────────────────────────────────┘ -->
+        <StatusBar DockPanel.Dock="Bottom">
+            <StatusBarItem>
+                <TextBlock x:Name="StatusText" Text="계산기 준비됨" />
+            </StatusBarItem>
+        </StatusBar>
+
+        <!-- ┌─────────────────────────────────────────┐ -->
+        <!-- │  중앙: 버튼 영역 (Grid)                  │ -->
+        <!-- └─────────────────────────────────────────┘ -->
+        <!-- Grid는 바둑판(표)처럼 행과 열로 나누어 배치합니다.
+             엑셀 시트의 셀에 하나씩 넣는 것과 같아요!
+
+             Grid.Row="0" Grid.Column="1" → 0번 행, 1번 열에 배치
+             Grid.ColumnSpan="2" → 2개의 열을 합쳐서 사용 (셀 병합) -->
+        <Grid Margin="5">
+            <!-- 행 정의: 5개 행 (각각 같은 비율) -->
+            <!-- Star(*)는 남은 공간을 비율로 나누는 것입니다.
+                 피자를 같은 크기로 5조각 내는 것과 같아요! -->
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- 열 정의: 4개 열 -->
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- 첫 번째 행: CE, 괄호, %, ÷ -->
+            <Button Grid.Row="0" Grid.Column="0" Content="CE" Margin="2"
+                    Click="OnClear" Background="#FF3B3B4F" Foreground="White" FontSize="18" />
+            <Button Grid.Row="0" Grid.Column="1" Content="(" Margin="2"
+                    Click="OnOperator" Background="#FF3B3B4F" Foreground="White" FontSize="18" />
+            <Button Grid.Row="0" Grid.Column="2" Content=")" Margin="2"
+                    Click="OnOperator" Background="#FF3B3B4F" Foreground="White" FontSize="18" />
+            <Button Grid.Row="0" Grid.Column="3" Content="÷" Margin="2"
+                    Click="OnOperator" Background="#FFFF9500" Foreground="White" FontSize="18" />
+
+            <!-- 두 번째 행: 7, 8, 9, × -->
+            <Button Grid.Row="1" Grid.Column="0" Content="7" Margin="2"
+                    Click="OnNumber" FontSize="20" />
+            <Button Grid.Row="1" Grid.Column="1" Content="8" Margin="2"
+                    Click="OnNumber" FontSize="20" />
+            <Button Grid.Row="1" Grid.Column="2" Content="9" Margin="2"
+                    Click="OnNumber" FontSize="20" />
+            <Button Grid.Row="1" Grid.Column="3" Content="×" Margin="2"
+                    Click="OnOperator" Background="#FFFF9500" Foreground="White" FontSize="18" />
+
+            <!-- 세 번째 행: 4, 5, 6, - -->
+            <Button Grid.Row="2" Grid.Column="0" Content="4" Margin="2"
+                    Click="OnNumber" FontSize="20" />
+            <Button Grid.Row="2" Grid.Column="1" Content="5" Margin="2"
+                    Click="OnNumber" FontSize="20" />
+            <Button Grid.Row="2" Grid.Column="2" Content="6" Margin="2"
+                    Click="OnNumber" FontSize="20" />
+            <Button Grid.Row="2" Grid.Column="3" Content="-" Margin="2"
+                    Click="OnOperator" Background="#FFFF9500" Foreground="White" FontSize="18" />
+
+            <!-- 네 번째 행: 1, 2, 3, + -->
+            <Button Grid.Row="3" Grid.Column="0" Content="1" Margin="2"
+                    Click="OnNumber" FontSize="20" />
+            <Button Grid.Row="3" Grid.Column="1" Content="2" Margin="2"
+                    Click="OnNumber" FontSize="20" />
+            <Button Grid.Row="3" Grid.Column="2" Content="3" Margin="2"
+                    Click="OnNumber" FontSize="20" />
+            <Button Grid.Row="3" Grid.Column="3" Content="+" Margin="2"
+                    Click="OnOperator" Background="#FFFF9500" Foreground="White" FontSize="18" />
+
+            <!-- 다섯 번째 행: 0 (2칸 차지), ., = -->
+            <!-- Grid.ColumnSpan="2" → 2개의 열을 합침!
+                 넓은 "0" 버튼을 만들기 위해 셀 병합을 사용합니다. -->
+            <Button Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2"
+                    Content="0" Margin="2" Click="OnNumber" FontSize="20" />
+            <Button Grid.Row="4" Grid.Column="2" Content="." Margin="2"
+                    Click="OnNumber" FontSize="20" />
+            <Button Grid.Row="4" Grid.Column="3" Content="=" Margin="2"
+                    Click="OnEquals" Background="#FF4CAF50" Foreground="White"
+                    FontSize="20" FontWeight="Bold" />
+        </Grid>
+    </DockPanel>
+</Window>

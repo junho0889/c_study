@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lesson-config
+data:
+  # 코드 바깥으로 뺄 수 있는 설정값을 넣어 둡니다.
+  # 비유하면 교실 규칙판처럼, 프로그램 안쪽 로직과 분리된 공통 안내문입니다.
+  APP_ENV: "development"
+  WELCOME_MESSAGE: "안녕하세요. 쿠버네티스 설정 예제입니다."
+
+  # 파일 통째로 설정을 넣는 것도 가능합니다.
+  nginx.conf: |
+    server {
+      listen 80;
+      location / {
+        return 200 "configmap 에서 읽은 설정입니다.";
+      }
+    }

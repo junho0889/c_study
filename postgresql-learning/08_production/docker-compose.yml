@@ -1,0 +1,177 @@
+# ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+# ■■■ PostgreSQL 프로덕션 환경                         ■■■
+# ■■■ PostgreSQL + PgBouncer + Prometheus Exporter     ■■■
+# ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+#
+# 아키텍처:
+#   App → PgBouncer(6432) → PostgreSQL(5432)
+#                            ↑
+#   Prometheus ← postgres_exporter(9187)
+#
+# 실행: docker-compose up -d
+# PgBouncer 접속: psql -h localhost -p 6432 -U app_user -d study_db
+# 직접 접속: psql -h localhost -p 5432 -U postgres -d study_db
+# 메트릭: http://localhost:9187/metrics
+# ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+version: "3.9"
+
+services:
+
+  # ─────────────────────────────────────────────
+  # ■■■ PostgreSQL 16 (프로덕션 설정) ■■■
+  # ─────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: pg-production
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: study_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-postgres_prod_2025!}
+      PGDATA: /var/lib/postgresql/data/pgdata
+      TZ: Asia/Seoul
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_prod_data:/var/lib/postgresql/data
+      # 프로덕션 설정 파일 마운트
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      # 초기화 스크립트
+      - ./init-production.sh:/docker-entrypoint-initdb.d/01_init.sh:ro
+    # ■■■ 커스텀 설정 파일 사용 ■■■
+    command: >
+      postgres
+      -c config_file=/etc/postgresql/postgresql.conf
+      -c hba_file=/etc/postgresql/pg_hba.conf
+    shm_size: '1gb'               # 프로덕션: 충분한 공유 메모리
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"              # CPU 4코어 제한
+          memory: 4G               # 메모리 4GB 제한
+        reservations:
+          cpus: "2.0"              # 최소 CPU 2코어 예약
+          memory: 2G               # 최소 메모리 2GB 예약
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d study_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"            # 로그 파일 최대 50MB
+        max-file: "5"              # 최대 5개 파일 로테이션
+    networks:
+      - pg_prod_net
+
+  # ─────────────────────────────────────────────
+  # ■■■ PgBouncer (커넥션 풀러) ■■■
+  # ─────────────────────────────────────────────
+  # PgBouncer: 가볍고 빠른 커넥션 풀러
+  # 수백~수천 개 앱 연결 → 소수의 DB 연결로 매핑
+  pgbouncer:
+    image: bitnami/pgbouncer:latest
+    container_name: pgbouncer-prod
+    restart: unless-stopped
+    environment:
+      # ■■■ PgBouncer 설정 ■■■
+      # 접속 대상 PostgreSQL
+      POSTGRESQL_HOST: postgres         # PostgreSQL 호스트 (Docker 네트워크)
+      POSTGRESQL_PORT: 5432             # PostgreSQL 포트
+      POSTGRESQL_USERNAME: postgres     # 인증 사용자
+      POSTGRESQL_PASSWORD: ${PG_PASSWORD:-postgres_prod_2025!}
+      POSTGRESQL_DATABASE: study_db     # 기본 데이터베이스
+
+      # ■■■ 풀링 모드 ■■■
+      # session: 세션 종료까지 연결 유지 (기본, 가장 호환성 좋음)
+      # transaction: 트랜잭션 종료 시 연결 반환 (가장 효율적, 권장!)
+      # statement: 각 SQL 문마다 연결 반환 (제한 사항 많음)
+      PGBOUNCER_POOL_MODE: transaction
+
+      # ■■■ 연결 수 설정 ■■■
+      PGBOUNCER_MAX_CLIENT_CONN: 500    # 클라이언트 최대 연결 수
+      PGBOUNCER_DEFAULT_POOL_SIZE: 25   # DB당 기본 풀 크기
+      PGBOUNCER_MIN_POOL_SIZE: 5        # 최소 유지 연결 수
+      PGBOUNCER_RESERVE_POOL_SIZE: 5    # 예비 풀 크기 (폭주 대비)
+      PGBOUNCER_RESERVE_POOL_TIMEOUT: 3 # 예비 풀 사용 전 대기 시간(초)
+      PGBOUNCER_MAX_DB_CONNECTIONS: 50  # DB당 최대 연결 수
+
+      # ■■■ 타임아웃 설정 ■■■
+      PGBOUNCER_SERVER_IDLE_TIMEOUT: 600      # 유휴 서버 연결 타임아웃 (초)
+      PGBOUNCER_CLIENT_IDLE_TIMEOUT: 0         # 유휴 클라이언트 타임아웃 (0=무제한)
+      PGBOUNCER_QUERY_TIMEOUT: 0               # 쿼리 타임아웃 (0=무제한)
+      PGBOUNCER_QUERY_WAIT_TIMEOUT: 120        # 풀에서 연결 대기 최대 시간 (초)
+
+      # ■■■ 로그 설정 ■■■
+      PGBOUNCER_LOG_CONNECTIONS: 1       # 연결 로그
+      PGBOUNCER_LOG_DISCONNECTIONS: 1    # 연결 해제 로그
+      PGBOUNCER_STATS_PERIOD: 60         # 통계 출력 간격 (초)
+
+      # ■■■ 인증 ■■■
+      PGBOUNCER_AUTH_TYPE: scram-sha-256   # 인증 방식
+      PGBOUNCER_IGNORE_STARTUP_PARAMETERS: extra_float_digits  # 무시할 파라미터
+    ports:
+      - "6432:6432"               # PgBouncer 포트 (앱이 이 포트로 접속)
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - pg_prod_net
+
+  # ─────────────────────────────────────────────
+  # ■■■ Prometheus PostgreSQL Exporter ■■■
+  # ─────────────────────────────────────────────
+  # postgres_exporter: PostgreSQL 메트릭을 Prometheus 형식으로 내보내기
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: pg-exporter
+    restart: unless-stopped
+    environment:
+      # PostgreSQL 연결 문자열
+      DATA_SOURCE_NAME: "postgresql://postgres:${PG_PASSWORD:-postgres_prod_2025!}@postgres:5432/study_db?sslmode=disable"
+      # 추가 메트릭 수집 활성화
+      PG_EXPORTER_DISABLE_DEFAULT_METRICS: "false"
+      PG_EXPORTER_DISABLE_SETTINGS_METRICS: "false"
+    ports:
+      - "9187:9187"              # Prometheus 메트릭 엔드포인트
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - pg_prod_net
+
+  # ─────────────────────────────────────────────
+  # ■■■ pgAdmin 4 (관리 도구) ■■■
+  # ─────────────────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin-prod
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_prod_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - pg_prod_net
+
+# ■■■ 볼륨 ■■■
+volumes:
+  pg_prod_data:
+    driver: local
+  pgadmin_prod_data:
+    driver: local
+
+# ■■■ 네트워크 ■■■
+networks:
+  pg_prod_net:
+    driver: bridge

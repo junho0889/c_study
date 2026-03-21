@@ -1,0 +1,21 @@
+# ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+# ■ 파일명: .dockerignore
+# ■ 목적: Docker 빌드 시 제외할 파일/폴더 목록
+# ■ 날짜: 2026-03-21
+# ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+.git
+.gitignore
+node_modules
+__pycache__
+*.pyc
+.venv
+.idea
+.vscode
+*.md
+.env
+.env.*
+*.log
+Dockerfile*
+docker-compose*
+.dockerignore

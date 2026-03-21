@@ -1,0 +1,61 @@
+# ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+# ■ 파일명: prometheus.yml
+# ■ 목적: Prometheus 수집 대상 설정
+# ■ 설명: 어디서 메트릭을 가져올지 정의
+# ■ 날짜: 2026-03-21
+# ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+# ── 전역 설정 ──
+# 모든 수집 대상에 공통으로 적용되는 설정
+global:
+  # scrape_interval = 메트릭을 가져오는 주기
+  # 15초마다 모든 타겟에게 "메트릭 줘!"라고 요청해
+  scrape_interval: 15s
+
+  # evaluation_interval = 알림 규칙을 평가하는 주기
+  # 15초마다 "CPU가 80% 넘었나?" 같은 규칙을 확인해
+  evaluation_interval: 15s
+
+  # 외부 시스템에 보낼 때 붙이는 라벨
+  external_labels:
+    monitor: 'docker-learning'              # 이 Prometheus를 식별하는 라벨
+
+# ── 수집 대상 설정 (scrape_configs) ──
+# 어디서 메트릭을 가져올지 정의하는 부분이야
+scrape_configs:
+
+  # ── 1. Prometheus 자체 메트릭 ──
+  # Prometheus 자기 자신도 메트릭을 제공해
+  # 메모리 사용량, 수집 성공/실패 횟수 등
+  - job_name: 'prometheus'                  # 수집 작업 이름
+    static_configs:
+      - targets: ['localhost:9090']         # 자기 자신
+        labels:
+          service: 'prometheus'             # 추가 라벨
+
+  # ── 2. 웹 애플리케이션 메트릭 ──
+  # Flask 앱이 /metrics 엔드포인트에서 메트릭을 제공해
+  # 요청 수, 응답 시간, 에러 수 등
+  - job_name: 'web-app'
+    scrape_interval: 10s                    # 이 타겟은 10초마다 (전역보다 자주)
+    static_configs:
+      - targets: ['web:8000']               # Docker DNS 이름 사용
+        labels:
+          service: 'web-app'
+          environment: 'development'
+
+  # ── 3. cAdvisor 컨테이너 메트릭 ──
+  # 모든 컨테이너의 CPU, 메모리, 네트워크, 디스크 사용량
+  - job_name: 'cadvisor'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['cadvisor:8080']          # cAdvisor 서비스
+        labels:
+          service: 'cadvisor'
+
+  # ── 4. Node Exporter (호스트 메트릭) ──
+  # 호스트 서버의 CPU, 메모리, 디스크 등
+  # (이 compose에는 포함 안 했지만 참고용)
+  # - job_name: 'node-exporter'
+  #   static_configs:
+  #     - targets: ['node-exporter:9100']

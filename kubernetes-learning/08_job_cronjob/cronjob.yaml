@@ -1,0 +1,143 @@
+# =============================================================================
+# Kubernetes 학습 08단계: CronJob (예약 작업)
+# =============================================================================
+# CronJob은 정해진 시간에 자동으로 Job을 생성합니다.
+# Linux의 crontab과 같은 개념입니다.
+#
+# 비유:
+#   Job     = "지금 바로 청소해!" (일회성)
+#   CronJob = "매일 아침 9시에 청소해!" (반복 예약)
+#
+# 사용 예시:
+#   - 매일 자정 DB 백업
+#   - 매시간 캐시 정리
+#   - 매주 월요일 리포트 생성
+#   - 매 5분마다 상태 점검
+# =============================================================================
+
+---
+# ─────────────────────────────────────────────
+# 1. 기본 CronJob
+# ─────────────────────────────────────────────
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: lesson-backup-cronjob
+spec:
+  # ┌──────────────────────────────────────────┐
+  # │  schedule: Cron 표현식 (실행 시간 설정)   │
+  # └──────────────────────────────────────────┘
+  # 형식: 분 시 일 월 요일
+  #       ┌───────────── 분 (0-59)
+  #       │ ┌─────────── 시 (0-23)
+  #       │ │ ┌───────── 일 (1-31)
+  #       │ │ │ ┌─────── 월 (1-12)
+  #       │ │ │ │ ┌───── 요일 (0-6, 0=일요일)
+  #       │ │ │ │ │
+  #       * * * * *
+  #
+  # 예시:
+  #   "0 2 * * *"    → 매일 새벽 2시
+  #   "*/5 * * * *"  → 매 5분마다
+  #   "0 9 * * 1"    → 매주 월요일 오전 9시
+  #   "0 0 1 * *"    → 매월 1일 자정
+  #   "30 8 * * 1-5" → 평일(월~금) 오전 8시 30분
+  #
+  # 비유: 알람 시계를 맞추는 것과 같습니다.
+  schedule: "*/10 * * * *"    # 매 10분마다 실행
+
+  # ┌──────────────────────────────────────────┐
+  # │  concurrencyPolicy: 동시 실행 정책        │
+  # └──────────────────────────────────────────┘
+  # 이전 Job이 아직 실행 중일 때 새 Job을 어떻게 할지 정합니다.
+  #
+  # Allow   : 동시 실행 허용 (기본값)
+  #           비유: "이전 청소가 안 끝나도 다음 청소를 시작"
+  # Forbid  : 이전 Job이 끝날 때까지 새 Job 생성하지 않음
+  #           비유: "이전 청소가 끝나야 다음 청소를 시작"
+  # Replace : 이전 Job을 취소하고 새 Job으로 교체
+  #           비유: "이전 청소를 중단하고 처음부터 다시 시작"
+  concurrencyPolicy: Forbid
+
+  # ┌──────────────────────────────────────────┐
+  # │  기타 설정                                │
+  # └──────────────────────────────────────────┘
+
+  # startingDeadlineSeconds: 예정 시간을 놓치면 이 시간 안에 실행
+  # 비유: "알람을 놓쳤어도 200초 안에는 일어나야 해"
+  # 이 시간을 넘기면 해당 실행은 건너뜁니다.
+  startingDeadlineSeconds: 200
+
+  # successfulJobsHistoryLimit: 완료된 Job을 몇 개까지 보관할지
+  # 비유: "지난 청소 기록을 3개까지만 보관"
+  successfulJobsHistoryLimit: 3
+
+  # failedJobsHistoryLimit: 실패한 Job을 몇 개까지 보관할지
+  failedJobsHistoryLimit: 1
+
+  # suspend: true로 설정하면 CronJob을 일시 중지합니다.
+  # 비유: 알람을 잠시 끄는 것 (나중에 다시 켤 수 있음)
+  suspend: false
+
+  # ─────────────────────────────────────────────
+  # jobTemplate: 실행할 Job 템플릿
+  # ─────────────────────────────────────────────
+  jobTemplate:
+    spec:
+      # Job이 완료된 후 60초 뒤에 자동 삭제
+      ttlSecondsAfterFinished: 60
+      backoffLimit: 2
+
+      template:
+        metadata:
+          labels:
+            app: lesson-backup
+        spec:
+          containers:
+            - name: backup-worker
+              image: python:3.12-slim
+              command:
+                - python
+                - -c
+                - |
+                  from datetime import datetime
+                  now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                  print(f"[{now}] 백업 작업을 시작합니다...")
+                  import time
+                  time.sleep(10)
+                  print(f"[{now}] 백업 작업이 완료되었습니다!")
+                  print(f"  다음 실행: 10분 후")
+
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: 200m
+                  memory: 256Mi
+
+          restartPolicy: OnFailure
+
+# =============================================================================
+# 사용 방법:
+#   kubectl apply -f cronjob.yaml
+#   kubectl get cronjob
+#   kubectl describe cronjob lesson-backup-cronjob
+#
+# 즉시 실행 (테스트):
+#   kubectl create job --from=cronjob/lesson-backup-cronjob test-backup
+#
+# 실행 기록 확인:
+#   kubectl get jobs -l app=lesson-backup  ← CronJob이 만든 Job 목록
+#   kubectl get pods -l app=lesson-backup  ← Job이 만든 Pod 목록
+#   kubectl logs job/<job-이름>             ← 로그 확인
+#
+# CronJob 일시 중지:
+#   kubectl patch cronjob lesson-backup-cronjob -p '{"spec":{"suspend":true}}'
+#
+# CronJob 재개:
+#   kubectl patch cronjob lesson-backup-cronjob -p '{"spec":{"suspend":false}}'
+#
+# 삭제 (관련 Job/Pod도 함께 삭제):
+#   kubectl delete cronjob lesson-backup-cronjob
+# =============================================================================

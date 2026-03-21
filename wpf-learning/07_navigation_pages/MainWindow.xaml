@@ -1,0 +1,53 @@
+<Window x:Class="LessonWpf.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="WPF 페이지 네비게이션 - 마법사 (Wizard)"
+        Height="450"
+        Width="550"
+        WindowStartupLocation="CenterScreen">
+    <!--
+    ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+    ■  WPF 07 - 네비게이션과 페이지                          ■
+    ■  멀티 페이지 마법사(Wizard) 만들기                      ■
+    ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+    이 파일에서 배우는 것:
+      1) Frame           - 페이지를 보여주는 액자 (TV 화면)
+      2) Page            - 전환되는 각각의 화면 (TV 채널)
+      3) NavigationService - 페이지 전환 관리 (리모컨)
+      4) 페이지 간 데이터 전달 - 쪽지 전달
+
+    비유: Frame은 TV 화면이고, Page는 각각의 채널입니다.
+          NavigationService는 리모컨으로 채널을 바꾸는 것과 같아요!
+    -->
+
+    <DockPanel>
+        <!-- 상단 제목 바 -->
+        <Border DockPanel.Dock="Top"
+                Background="#FF3F51B5"
+                Padding="15,12">
+            <StackPanel>
+                <TextBlock Text="회원가입 마법사"
+                           FontSize="20"
+                           FontWeight="Bold"
+                           Foreground="White" />
+                <TextBlock x:Name="StepIndicator"
+                           Text="1단계 / 3단계"
+                           FontSize="13"
+                           Foreground="#BBFFFFFF"
+                           Margin="0,4,0,0" />
+            </StackPanel>
+        </Border>
+
+        <!-- ┌─────────────────────────────────────────┐ -->
+        <!-- │  Frame - 페이지를 담는 액자               │ -->
+        <!-- └─────────────────────────────────────────┘ -->
+        <!-- Frame은 Page를 보여주는 컨테이너입니다.
+             NavigationUIVisibility="Hidden"으로
+             기본 뒤로가기 버튼을 숨깁니다 (우리가 직접 만들 거니까!).
+             Navigated 이벤트: 페이지가 바뀔 때 발생합니다. -->
+        <Frame x:Name="MainFrame"
+               NavigationUIVisibility="Hidden"
+               Navigated="MainFrame_Navigated" />
+    </DockPanel>
+</Window>

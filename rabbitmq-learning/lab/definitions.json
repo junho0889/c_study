@@ -1,0 +1,188 @@
+{
+  "_comment_1": "■■■ RabbitMQ 사전 정의 파일 ■■■",
+  "_comment_2": "이 파일은 RabbitMQ 시작 시 자동으로 로드되어 Exchange, Queue, Binding을 생성합니다.",
+  "_comment_3": "rabbitmq.conf의 management.load_definitions 설정에 의해 참조됩니다.",
+
+  "rabbit_version": "3.12.0",
+
+  "users": [
+    {
+      "_comment": "관리자 계정 (docker-compose.yml의 환경변수로도 설정되지만 definitions에서도 정의)",
+      "name": "admin",
+      "password_hash": "admin1234",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": ["administrator"]
+    }
+  ],
+
+  "vhosts": [
+    {
+      "_comment": "기본 가상 호스트",
+      "name": "/"
+    }
+  ],
+
+  "permissions": [
+    {
+      "_comment": "admin 사용자에게 모든 권한 부여 (configure, write, read)",
+      "user": "admin",
+      "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    }
+  ],
+
+  "exchanges": [
+    {
+      "_comment": "■■■ Direct Exchange: 라우팅 키가 정확히 일치하는 큐에 전달",
+      "_comment2": "사용 사례: 작업 분배, 특정 서비스로의 메시지 라우팅",
+      "name": "direct.exchange",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "_comment": "■■■ Topic Exchange: 라우팅 키의 패턴 매칭으로 전달",
+      "_comment2": "* = 정확히 1단어, # = 0개 이상의 단어",
+      "_comment3": "사용 사례: 로그 라우팅 (log.error, log.info 등)",
+      "name": "topic.exchange",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "_comment": "■■■ Fanout Exchange: 바인딩된 모든 큐에 브로드캐스트",
+      "_comment2": "라우팅 키를 무시하고 모든 바인딩된 큐에 메시지 전달",
+      "_comment3": "사용 사례: 알림 브로드캐스트, 이벤트 발행",
+      "name": "fanout.exchange",
+      "vhost": "/",
+      "type": "fanout",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "_comment": "■■■ Headers Exchange: 메시지 헤더 속성으로 라우팅",
+      "_comment2": "라우팅 키 대신 메시지 헤더의 key-value 쌍으로 매칭",
+      "_comment3": "사용 사례: 복잡한 라우팅 규칙이 필요할 때",
+      "name": "headers.exchange",
+      "vhost": "/",
+      "type": "headers",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+
+  "queues": [
+    {
+      "_comment": "■■■ 주문 처리 큐 (Direct Exchange에 바인딩)",
+      "name": "order.queue",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "_comment": "메시지 TTL 60분, 최대 길이 10000개",
+        "x-message-ttl": 3600000,
+        "x-max-length": 10000
+      }
+    },
+    {
+      "_comment": "■■■ 에러 로그 큐 (Topic Exchange에 바인딩, log.error 패턴)",
+      "name": "log.error.queue",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "_comment": "■■■ 전체 로그 큐 (Topic Exchange에 바인딩, log.# 패턴)",
+      "name": "log.all.queue",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "_comment": "■■■ 알림 큐 A (Fanout Exchange에 바인딩)",
+      "name": "notification.a.queue",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "_comment": "■■■ 알림 큐 B (Fanout Exchange에 바인딩)",
+      "name": "notification.b.queue",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "_comment": "■■■ Dead Letter Queue: 처리 실패한 메시지가 이동하는 큐",
+      "name": "dead.letter.queue",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    }
+  ],
+
+  "bindings": [
+    {
+      "_comment": "Direct: order 라우팅 키 → order.queue",
+      "source": "direct.exchange",
+      "vhost": "/",
+      "destination": "order.queue",
+      "destination_type": "queue",
+      "routing_key": "order",
+      "arguments": {}
+    },
+    {
+      "_comment": "Topic: log.error 패턴 → log.error.queue",
+      "source": "topic.exchange",
+      "vhost": "/",
+      "destination": "log.error.queue",
+      "destination_type": "queue",
+      "routing_key": "log.error",
+      "arguments": {}
+    },
+    {
+      "_comment": "Topic: log.# 패턴 → log.all.queue (모든 로그 수신)",
+      "source": "topic.exchange",
+      "vhost": "/",
+      "destination": "log.all.queue",
+      "destination_type": "queue",
+      "routing_key": "log.#",
+      "arguments": {}
+    },
+    {
+      "_comment": "Fanout: 라우팅 키 무시 → notification.a.queue에 브로드캐스트",
+      "source": "fanout.exchange",
+      "vhost": "/",
+      "destination": "notification.a.queue",
+      "destination_type": "queue",
+      "routing_key": "",
+      "arguments": {}
+    },
+    {
+      "_comment": "Fanout: 라우팅 키 무시 → notification.b.queue에 브로드캐스트",
+      "source": "fanout.exchange",
+      "vhost": "/",
+      "destination": "notification.b.queue",
+      "destination_type": "queue",
+      "routing_key": "",
+      "arguments": {}
+    }
+  ]
+}

@@ -1,0 +1,139 @@
+# =============================================================================
+# Kubernetes 학습 06단계: ResourceQuota와 LimitRange
+# =============================================================================
+# 여러 팀이 같은 클러스터를 사용할 때,
+# 한 팀이 자원을 모두 독차지하면 다른 팀이 곤란합니다.
+#
+# ResourceQuota: 네임스페이스 전체의 자원 총량을 제한합니다.
+#   비유: "우리 반 전체 예산은 100만원까지!"
+#
+# LimitRange: 개별 Pod/컨테이너의 자원 기본값과 범위를 정합니다.
+#   비유: "한 학생당 용돈은 최소 1만원, 최대 10만원"
+# =============================================================================
+
+---
+# ─────────────────────────────────────────────
+# 0. 네임스페이스 생성 (자원 격리 단위)
+# ─────────────────────────────────────────────
+# 비유: 네임스페이스는 "학급"과 같습니다.
+#       각 학급(네임스페이스)마다 예산(ResourceQuota)을 따로 정합니다.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lesson-team-a
+
+---
+# ─────────────────────────────────────────────
+# 1. ResourceQuota (네임스페이스 전체 자원 제한)
+# ─────────────────────────────────────────────
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: lesson-quota
+  namespace: lesson-team-a
+spec:
+  hard:
+    # ┌──────────────────────────────────────────┐
+    # │  컴퓨팅 자원 제한                         │
+    # └──────────────────────────────────────────┘
+    # 이 네임스페이스의 모든 Pod가 사용할 수 있는 총량입니다.
+    # 비유: "우리 반 전체가 쓸 수 있는 자원"
+
+    # requests: 최소 보장 자원의 총합
+    requests.cpu: "4"           # 총 CPU requests 합계 최대 4코어
+    requests.memory: 4Gi        # 총 메모리 requests 합계 최대 4GB
+
+    # limits: 최대 사용 자원의 총합
+    limits.cpu: "8"             # 총 CPU limits 합계 최대 8코어
+    limits.memory: 8Gi          # 총 메모리 limits 합계 최대 8GB
+
+    # ┌──────────────────────────────────────────┐
+    # │  오브젝트 수 제한                         │
+    # └──────────────────────────────────────────┘
+    # 비유: "우리 반에 사물함은 최대 10개, 책상은 최대 5개"
+    pods: "20"                  # Pod 최대 20개
+    services: "10"              # Service 최대 10개
+    configmaps: "20"            # ConfigMap 최대 20개
+    secrets: "20"               # Secret 최대 20개
+    persistentvolumeclaims: "5" # PVC 최대 5개
+
+    # ┌──────────────────────────────────────────┐
+    # │  스토리지 제한                             │
+    # └──────────────────────────────────────────┘
+    requests.storage: 50Gi      # 전체 스토리지 요청 합계 최대 50GB
+
+---
+# ─────────────────────────────────────────────
+# 2. LimitRange (개별 Pod/컨테이너 자원 범위)
+# ─────────────────────────────────────────────
+# ResourceQuota가 "반 전체 예산"이라면,
+# LimitRange는 "학생 개인별 용돈 규칙"입니다.
+#
+# 왜 필요한가?
+#   - 개발자가 resources를 안 적으면 무제한으로 사용할 수 있습니다.
+#   - LimitRange가 기본값(default)을 자동으로 넣어 줍니다.
+#   - Pod가 너무 크거나 작은 자원을 요청하는 것을 방지합니다.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: lesson-limit-range
+  namespace: lesson-team-a
+spec:
+  limits:
+    # ┌──────────────────────────────────────────┐
+    # │  컨테이너 레벨 제한                       │
+    # └──────────────────────────────────────────┘
+    - type: Container
+      # default: resources를 안 적었을 때 자동으로 적용되는 limits
+      # 비유: "용돈을 안 정한 학생은 자동으로 5만원으로 설정"
+      default:
+        cpu: 200m           # 기본 CPU limits: 0.2코어
+        memory: 256Mi       # 기본 메모리 limits: 256MB
+
+      # defaultRequest: 자동으로 적용되는 requests
+      # 비유: "최소 보장 용돈을 안 정한 학생은 자동으로 1만원 보장"
+      defaultRequest:
+        cpu: 100m           # 기본 CPU requests: 0.1코어
+        memory: 128Mi       # 기본 메모리 requests: 128MB
+
+      # max: 컨테이너 하나가 요청할 수 있는 최대 자원
+      # 비유: "한 학생이 최대 10만원까지만 쓸 수 있어"
+      max:
+        cpu: "2"            # 컨테이너당 최대 CPU 2코어
+        memory: 2Gi         # 컨테이너당 최대 메모리 2GB
+
+      # min: 컨테이너 하나가 요청해야 하는 최소 자원
+      # 비유: "최소 5천원은 있어야 교실에 들어올 수 있어"
+      min:
+        cpu: 50m            # 컨테이너당 최소 CPU 0.05코어
+        memory: 64Mi        # 컨테이너당 최소 메모리 64MB
+
+    # ┌──────────────────────────────────────────┐
+    # │  PVC 레벨 제한                            │
+    # └──────────────────────────────────────────┘
+    - type: PersistentVolumeClaim
+      max:
+        storage: 10Gi       # PVC 하나당 최대 10GB
+      min:
+        storage: 100Mi      # PVC 하나당 최소 100MB
+
+# =============================================================================
+# 사용 방법:
+#   kubectl apply -f resource-quota.yaml
+#   kubectl get resourcequota -n lesson-team-a
+#   kubectl describe resourcequota lesson-quota -n lesson-team-a
+#   kubectl get limitrange -n lesson-team-a
+#
+# 테스트 (quota 초과 시):
+#   # 너무 큰 자원을 요청하는 Pod를 만들면 거부됩니다:
+#   kubectl run big-pod --image=nginx --namespace=lesson-team-a \
+#     --requests='cpu=10,memory=100Gi'
+#   # → 에러: exceeded quota
+#
+# ResourceQuota가 있으면 모든 Pod에 resources를 적어야 합니다!
+# LimitRange가 있으면 기본값이 자동 적용되므로 편리합니다.
+#
+# quota 사용량 확인:
+#   kubectl describe resourcequota lesson-quota -n lesson-team-a
+#   → Used / Hard 열에서 현재 사용량과 한도를 확인할 수 있습니다.
+# =============================================================================

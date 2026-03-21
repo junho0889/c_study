@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: lesson-pod
+  labels:
+    # 라벨은 "이 파드는 어떤 팀 소속인가"를 붙이는 이름표입니다.
+    app: lesson-web
+spec:
+  containers:
+    - name: lesson-web
+      image: nginx:1.27-alpine
+      ports:
+        - containerPort: 80
+      # 가장 작은 실행 단위가 Pod이고,
+      # 그 안에는 보통 1개 이상의 컨테이너가 들어 있습니다.
+      # 여기서는 가장 단순한 nginx 컨테이너 1개만 넣었습니다.

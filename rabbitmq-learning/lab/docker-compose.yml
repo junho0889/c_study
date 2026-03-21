@@ -1,0 +1,141 @@
+##############################################################################
+# ■■■ RabbitMQ Docker Compose 실습 환경 ■■■
+#
+# 구성 요소:
+#   - RabbitMQ: 메시지 브로커 (Management Plugin 포함)
+#     - AMQP 포트 (5672): 메시지 프로듀서/컨슈머 연결
+#     - Management UI 포트 (15672): 웹 기반 관리 도구
+#
+# 실행 방법:
+#   docker-compose up -d
+#
+# Management UI 접속:
+#   http://localhost:15672
+#   기본 계정: admin / admin1234
+#
+# 종료 방법:
+#   docker-compose down          # 컨테이너만 삭제
+#   docker-compose down -v       # 컨테이너 + 데이터 삭제
+##############################################################################
+
+version: "3.8"
+
+# ■■■ 서비스 정의 ■■■
+services:
+
+  ##########################################################################
+  # ■■■ RabbitMQ 서버 ■■■
+  # AMQP 0-9-1 프로토콜 기반의 오픈소스 메시지 브로커
+  #
+  # 핵심 개념:
+  #   Producer → Exchange → Binding → Queue → Consumer
+  #
+  # Management Plugin:
+  #   웹 UI에서 Exchange, Queue, Binding, 메시지 등을 관리/모니터링
+  ##########################################################################
+  rabbitmq:
+    # rabbitmq:3-management 이미지: Management Plugin이 미리 활성화된 공식 이미지
+    # Alpine 버전을 사용하면 더 경량 (rabbitmq:3-management-alpine)
+    image: rabbitmq:${RABBITMQ_VERSION:-3-management}
+    container_name: rabbitmq
+    hostname: rabbitmq
+    # 비정상 종료 시 자동 재시작
+    restart: unless-stopped
+
+    ports:
+      # AMQP 프로토콜 포트 (프로듀서/컨슈머 연결용)
+      # 클라이언트 라이브러리(pika, amqplib 등)가 이 포트로 연결
+      - "${RABBITMQ_AMQP_PORT:-5672}:5672"
+
+      # Management UI 웹 포트 (브라우저 접속용)
+      # http://localhost:15672 로 접속
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+
+      # MQTT 프로토콜 포트 (IoT 디바이스 연결용, 선택사항)
+      # - "${RABBITMQ_MQTT_PORT:-1883}:1883"
+
+      # STOMP 프로토콜 포트 (웹소켓 기반, 선택사항)
+      # - "${RABBITMQ_STOMP_PORT:-61613}:61613"
+
+    environment:
+      # ── 기본 사용자 설정 ──
+      # Management UI 및 AMQP 접속에 사용할 관리자 계정
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-admin1234}
+
+      # ── 가상 호스트 설정 ──
+      # Virtual Host: RabbitMQ의 논리적 격리 단위
+      # 서로 다른 vhost의 Exchange, Queue, Binding은 완전히 분리됨
+      # 멀티테넌트 환경에서 유용 (예: 개발/스테이징/프로덕션)
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/}
+
+      # ── Erlang Cookie ──
+      # 클러스터링 시 노드 간 인증에 사용하는 공유 비밀
+      # 같은 클러스터의 모든 노드가 동일한 Cookie를 가져야 함
+      RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE:-rabbitmq-secret-cookie}
+
+      # ── 서버 이름 ──
+      # 클러스터에서 이 노드를 식별하는 이름
+      RABBITMQ_NODENAME: rabbit@rabbitmq
+
+      # ── 플러그인 활성화 ──
+      # management: 웹 Management UI
+      # rabbitmq_shovel, rabbitmq_shovel_management: 브로커 간 메시지 이동
+      # 필요에 따라 추가 플러그인 활성화 가능
+      RABBITMQ_PLUGINS: "rabbitmq_management"
+
+    volumes:
+      # RabbitMQ 데이터 영속화 (큐에 저장된 메시지, Exchange/Queue 정의 등)
+      - rabbitmq-data:/var/lib/rabbitmq
+
+      # 커스텀 설정 파일 마운트
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+
+      # 사전 정의된 Exchange/Queue/Binding 설정
+      # RabbitMQ 시작 시 자동으로 이 정의를 로드
+      - ./definitions.json:/etc/rabbitmq/definitions.json:ro
+
+    networks:
+      - rabbitmq-network
+
+    # 헬스체크: RabbitMQ 상태 확인
+    healthcheck:
+      # rabbitmq-diagnostics check_port_connectivity: 포트 연결 상태 확인
+      test: rabbitmq-diagnostics -q check_port_connectivity
+      # 15초마다 체크
+      interval: 15s
+      # 10초 내 응답 없으면 실패
+      timeout: 10s
+      # 5번 연속 실패하면 unhealthy
+      retries: 5
+      # 서비스 시작 후 30초 대기 (Erlang VM 부팅 시간)
+      start_period: 30s
+
+    # 리소스 제한 (선택사항, 실습 환경에서는 주석 처리)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       # 최대 CPU 사용량
+    #       cpus: "1.0"
+    #       # 최대 메모리 사용량
+    #       memory: 512M
+    #     reservations:
+    #       # 최소 보장 CPU
+    #       cpus: "0.25"
+    #       # 최소 보장 메모리
+    #       memory: 256M
+
+# ■■■ 볼륨 정의 ■■■
+volumes:
+  # RabbitMQ 데이터 볼륨
+  # Mnesia 데이터베이스 (큐, Exchange, Binding 메타데이터)
+  # 메시지 데이터 (persistent 메시지)
+  rabbitmq-data:
+    driver: local
+
+# ■■■ 네트워크 정의 ■■■
+networks:
+  rabbitmq-network:
+    # bridge 드라이버: 단일 호스트 내 컨테이너 간 통신
+    driver: bridge
+    name: rabbitmq-network

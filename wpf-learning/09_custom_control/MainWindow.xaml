@@ -1,0 +1,107 @@
+<Window x:Class="LessonWpf.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:LessonWpf"
+        Title="WPF 커스텀 컨트롤 - 별점 평가"
+        Height="500"
+        Width="550"
+        WindowStartupLocation="CenterScreen">
+    <!--
+    ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+    ■  WPF 09 - 커스텀 컨트롤 (Custom Control)               ■
+    ■  별점(Star Rating) 컨트롤 만들기                         ■
+    ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+    이 파일에서 배우는 것:
+      1) UserControl vs CustomControl
+         - UserControl: 기존 컨트롤 조합 (레고 조립)
+         - CustomControl: 완전히 새로 만듦 (점토로 빚기)
+      2) DependencyProperty - WPF 특별 속성 (바인딩 가능!)
+      3) RoutedEvent - 이벤트가 부모에게 전달 (소리가 퍼지듯)
+      4) 커스텀 렌더링 - 원하는 모양 직접 그리기
+
+    비유:
+      기본 컨트롤 = 마트에서 산 완제품
+      UserControl = 반제품을 조립 (IKEA 가구)
+      CustomControl = 직접 만든 수제품 (도자기)
+    -->
+
+    <DockPanel Margin="20">
+        <!-- 제목 -->
+        <TextBlock DockPanel.Dock="Top"
+                   Text="별점 평가 컨트롤"
+                   FontSize="22"
+                   FontWeight="Bold"
+                   Margin="0,0,0,20" />
+
+        <ScrollViewer>
+            <StackPanel>
+                <!-- ┌─────────────────────────────────┐ -->
+                <!-- │  RatingControl 사용 예제          │ -->
+                <!-- └─────────────────────────────────┘ -->
+
+                <!-- 예제 1: 기본 사용 -->
+                <TextBlock Text="1. 기본 별점 (5개)"
+                           FontSize="15" FontWeight="Bold"
+                           Margin="0,0,0,5" />
+                <local:RatingControl x:Name="Rating1"
+                                     MaxRating="5"
+                                     Rating="3"
+                                     StarSize="40"
+                                     RatingChanged="OnRatingChanged" />
+
+                <!-- 예제 2: 큰 별점 -->
+                <TextBlock Text="2. 큰 별점 (10개)"
+                           FontSize="15" FontWeight="Bold"
+                           Margin="0,15,0,5" />
+                <local:RatingControl x:Name="Rating2"
+                                     MaxRating="10"
+                                     Rating="7"
+                                     StarSize="30"
+                                     ActiveColor="Gold"
+                                     RatingChanged="OnRatingChanged" />
+
+                <!-- 예제 3: 색상 변경 -->
+                <TextBlock Text="3. 커스텀 색상 별점"
+                           FontSize="15" FontWeight="Bold"
+                           Margin="0,15,0,5" />
+                <local:RatingControl x:Name="Rating3"
+                                     MaxRating="5"
+                                     Rating="4"
+                                     StarSize="45"
+                                     ActiveColor="#FFFF5722"
+                                     InactiveColor="#FFFFCCBC"
+                                     RatingChanged="OnRatingChanged" />
+
+                <!-- 결과 표시 -->
+                <Border Margin="0,25,0,0"
+                        Padding="15"
+                        Background="#FFF3E5F5"
+                        CornerRadius="8">
+                    <StackPanel>
+                        <TextBlock Text="평가 결과"
+                                   FontSize="16" FontWeight="Bold"
+                                   Margin="0,0,0,8" />
+                        <TextBlock x:Name="ResultText"
+                                   Text="별을 클릭하여 평가해 보세요!"
+                                   FontSize="14"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <!-- DependencyProperty 설명 -->
+                <Border Margin="0,15,0,0"
+                        Padding="15"
+                        Background="#FFE8F5E9"
+                        CornerRadius="8">
+                    <TextBlock TextWrapping="Wrap" FontSize="13">
+                        DependencyProperty는 일반 C# 속성(Property)의 "업그레이드 버전"입니다.
+                        일반 속성은 값을 저장만 하지만,
+                        DependencyProperty는 바인딩, 애니메이션, 스타일이 가능합니다!
+                        집 열쇠(일반 속성) vs 스마트 도어락(DependencyProperty)
+                    </TextBlock>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

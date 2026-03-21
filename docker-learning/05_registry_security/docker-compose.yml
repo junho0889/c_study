@@ -1,0 +1,87 @@
+# ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+# ■ 파일명: docker-compose.yml
+# ■ 목적: 프라이빗 Docker Registry 구축
+# ■ 설명: 자체 이미지 저장소 + 웹 UI 제공
+# ■ 실행: docker-compose up -d
+# ■ 날짜: 2026-03-21
+# ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+# ── 왜 프라이빗 레지스트리가 필요할까? ──
+#
+# 1. Docker Hub 무료 계정은 private repo 제한이 있어
+# 2. 회사 내부 이미지를 외부에 올리면 안 되는 경우
+# 3. 네트워크가 빠름 (같은 네트워크 안에 있으니까)
+# 4. 완전한 통제권 (누가 push/pull 하는지 관리)
+
+services:
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # 서비스 1: Docker Registry
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # registry:2 = Docker 공식 레지스트리 이미지
+  # Docker Hub와 똑같은 기능을 제공해!
+  registry:
+    image: registry:2                        # Docker 공식 레지스트리 v2
+    container_name: private-registry         # 컨테이너 이름
+    ports:
+      - "5000:5000"                          # 레지스트리 기본 포트
+    environment:
+      # ── 레지스트리 설정 환경변수 ──
+      # 이미지를 삭제할 수 있게 허용 (기본적으로는 비활성화)
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+      # 저장소 경로 지정
+      REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY: /var/lib/registry
+      # HTTP 헤더 설정 (CORS 허용 - 웹 UI에서 접근하기 위해)
+      REGISTRY_HTTP_HEADERS_Access-Control-Allow-Origin: '["*"]'
+      REGISTRY_HTTP_HEADERS_Access-Control-Allow-Methods: '["HEAD", "GET", "OPTIONS", "DELETE"]'
+      REGISTRY_HTTP_HEADERS_Access-Control-Allow-Headers: '["Authorization", "Accept", "Cache-Control"]'
+    volumes:
+      # 이미지 데이터를 볼륨에 영구 보존
+      # 이게 없으면 컨테이너 재시작 시 모든 이미지가 사라져!
+      - registry-data:/var/lib/registry      # 레지스트리 데이터 저장
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5000/v2/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - registry-net                         # 레지스트리 네트워크
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # 서비스 2: Registry 웹 UI
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # 브라우저에서 레지스트리의 이미지를 편하게 볼 수 있어
+  registry-ui:
+    image: joxit/docker-registry-ui:latest   # 레지스트리 웹 UI
+    container_name: registry-ui              # 컨테이너 이름
+    ports:
+      - "8080:80"                            # 브라우저에서 http://localhost:8080
+    environment:
+      # 레지스트리 URL 설정 (UI가 이 주소로 API 호출)
+      - REGISTRY_TITLE=My Private Registry   # 웹 UI 제목
+      - NGINX_PROXY_PASS_URL=http://registry:5000  # 레지스트리 주소
+      - SINGLE_REGISTRY=true                 # 단일 레지스트리 모드
+      - DELETE_IMAGES=true                   # 이미지 삭제 버튼 표시
+    depends_on:
+      registry:
+        condition: service_healthy           # 레지스트리 준비 후 시작
+    restart: unless-stopped
+    networks:
+      - registry-net
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# volumes
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+volumes:
+  registry-data:
+    driver: local
+    name: private-registry-data              # 레지스트리 이미지 저장소
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# networks
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+networks:
+  registry-net:
+    driver: bridge
+    name: registry-network

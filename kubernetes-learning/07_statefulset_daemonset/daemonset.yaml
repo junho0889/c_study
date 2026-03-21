@@ -1,0 +1,170 @@
+# =============================================================================
+# Kubernetes 학습 07단계: DaemonSet (모든 노드에 하나씩)
+# =============================================================================
+# DaemonSet은 클러스터의 모든 노드에 Pod를 "하나씩" 배치합니다.
+# 새 노드가 추가되면 자동으로 Pod가 생기고,
+# 노드가 제거되면 해당 Pod도 자동으로 삭제됩니다.
+#
+# 비유:
+#   Deployment  = "이 직원을 3명 고용해!" (어느 지점에 배치될지는 스케줄러 결정)
+#   DaemonSet   = "모든 지점에 경비원 1명씩 배치해!" (모든 노드에 1개씩)
+#
+# 주요 용도:
+#   1. 로그 수집 에이전트 (Fluentd, Filebeat)
+#   2. 모니터링 에이전트 (Prometheus Node Exporter, Datadog Agent)
+#   3. 네트워크 플러그인 (Calico, Cilium)
+#   4. 스토리지 데몬 (Ceph, GlusterFS)
+# =============================================================================
+
+---
+# ─────────────────────────────────────────────
+# 1. 로그 수집 에이전트 DaemonSet
+# ─────────────────────────────────────────────
+# 모든 노드에서 컨테이너 로그를 수집하는 에이전트입니다.
+# 비유: 모든 교실에 CCTV를 설치하는 것
+#       - 교실이 하나 더 생기면 자동으로 CCTV도 설치됩니다.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: lesson-log-agent
+  labels:
+    app: log-agent
+spec:
+  selector:
+    matchLabels:
+      app: log-agent
+
+  template:
+    metadata:
+      labels:
+        app: log-agent
+    spec:
+      # ┌──────────────────────────────────────────┐
+      # │  tolerations: 특수 노드에도 배치하기       │
+      # └──────────────────────────────────────────┘
+      # 마스터 노드(control-plane)에는 보통 일반 Pod가 배치되지 않습니다.
+      # DaemonSet은 모니터링/로깅 목적이므로 마스터 노드에도 배치할 수 있습니다.
+      # 비유: "교장실에도 CCTV를 설치해야 합니다"
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+
+      containers:
+        - name: log-agent
+          image: busybox:1.36
+          # 간단한 로그 수집 시뮬레이션
+          command:
+            - sh
+            - -c
+            - |
+              echo "[로그 에이전트] $(hostname) 노드에서 시작됨"
+              while true; do
+                echo "[$(date)] $(hostname): 로그 수집 중..."
+                sleep 60
+              done
+
+          resources:
+            # DaemonSet은 모든 노드에 하나씩 배치되므로
+            # 자원 요청을 작게 잡아야 합니다!
+            # 비유: 모든 교실에 설치하는 것이니까 작고 효율적이어야 합니다.
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+
+          # ┌──────────────────────────────────────────┐
+          # │  노드의 로그 디렉터리를 마운트             │
+          # └──────────────────────────────────────────┘
+          # 각 노드의 실제 컨테이너 로그 파일을 읽기 위해
+          # 호스트 경로를 마운트합니다.
+          volumeMounts:
+            - name: varlog
+              mountPath: /var/log
+              readOnly: true
+            - name: container-logs
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+
+      volumes:
+        - name: varlog
+          hostPath:
+            path: /var/log
+        - name: container-logs
+          hostPath:
+            path: /var/lib/docker/containers
+
+---
+# ─────────────────────────────────────────────
+# 2. 모니터링 에이전트 DaemonSet (노드 선택)
+# ─────────────────────────────────────────────
+# 특정 노드에만 DaemonSet을 배치하는 예시입니다.
+# 비유: "GPU가 있는 교실에만 특수 모니터를 설치"
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: lesson-monitor-agent
+  labels:
+    app: monitor-agent
+spec:
+  selector:
+    matchLabels:
+      app: monitor-agent
+
+  template:
+    metadata:
+      labels:
+        app: monitor-agent
+    spec:
+      # ┌──────────────────────────────────────────┐
+      # │  nodeSelector: 특정 라벨을 가진 노드에만   │
+      # └──────────────────────────────────────────┘
+      # 모든 노드가 아니라, 특정 조건의 노드에만 배치합니다.
+      # 노드에 라벨 추가: kubectl label node <노드명> monitoring=enabled
+      nodeSelector:
+        monitoring: enabled
+
+      containers:
+        - name: monitor
+          image: busybox:1.36
+          command: ["sh", "-c", "echo 'Monitor on' $(hostname) && sleep infinity"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+
+  # updateStrategy: DaemonSet 업데이트 전략
+  # RollingUpdate (기본값): 하나씩 업데이트
+  # OnDelete: 수동 삭제 시에만 업데이트
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # maxUnavailable: 동시에 업데이트할 수 있는 최대 Pod 수
+      # 비유: "한 번에 CCTV 1대씩만 교체" (모든 CCTV를 동시에 끄면 안 되니까)
+      maxUnavailable: 1
+
+# =============================================================================
+# 사용 방법:
+#   kubectl apply -f daemonset.yaml
+#   kubectl get daemonset
+#   kubectl get pods -l app=log-agent -o wide   ← 각 노드에 1개씩 확인
+#
+# 노드 라벨 관리:
+#   kubectl label node <노드명> monitoring=enabled  ← 라벨 추가
+#   kubectl label node <노드명> monitoring-          ← 라벨 제거
+#
+# DaemonSet vs Deployment 비교:
+#   ┌──────────────┬──────────────────────────────────┐
+#   │              │ Deployment     │ DaemonSet        │
+#   ├──────────────┼────────────────┼──────────────────┤
+#   │ Pod 수 결정  │ replicas 설정  │ 노드 수만큼 자동 │
+#   │ 배치 방식    │ 스케줄러 결정  │ 모든 노드에 1개  │
+#   │ 용도         │ 일반 앱        │ 시스템 데몬      │
+#   │ 스케일링     │ 수동/HPA       │ 노드 추가/삭제   │
+#   └──────────────┴────────────────┴──────────────────┘
+# =============================================================================

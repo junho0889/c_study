@@ -1,0 +1,119 @@
+# ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+# ■■■ PostgreSQL 스트리밍 복제 실습 환경               ■■■
+# ■■■ Primary(쓰기) + Standby(읽기, 복제)             ■■■
+# ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+#
+# 아키텍처:
+#   Primary (5432) ──WAL──→ Standby (5433)
+#   (읽기/쓰기)              (읽기 전용)
+#
+# 실행: docker-compose up -d
+# Primary 접속: psql -h localhost -p 5432 -U postgres -d study_db
+# Standby 접속: psql -h localhost -p 5433 -U postgres -d study_db
+# ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+version: "3.9"
+
+services:
+
+  # ─────────────────────────────────────────────
+  # ■■■ Primary (마스터) 서버 ■■■
+  # ─────────────────────────────────────────────
+  primary:
+    image: postgres:16-alpine
+    container_name: pg-primary
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: study_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+      PGDATA: /var/lib/postgresql/data/pgdata
+      # ■■■ 복제용 사용자 설정 ■■■
+      POSTGRES_INITDB_ARGS: "--data-checksums"  # 데이터 체크섬 활성화 (무결성 검증)
+    ports:
+      - "5432:5432"         # Primary 포트
+    volumes:
+      - primary_data:/var/lib/postgresql/data
+      # ■■■ 초기화 스크립트: 복제 사용자 생성 및 설정 ■■■
+      - ./init-primary.sh:/docker-entrypoint-initdb.d/01_init_primary.sh:ro
+    command: >
+      postgres
+      -c wal_level=replica                    # WAL 레벨: replica (복제 필수 설정)
+      -c max_wal_senders=5                    # 최대 WAL 전송 프로세스 수
+      -c max_replication_slots=5              # 최대 복제 슬롯 수
+      -c wal_keep_size=256MB                  # 유지할 WAL 파일 크기 (standby 지연 대비)
+      -c hot_standby=on                       # Standby에서 읽기 쿼리 허용
+      -c synchronous_commit=on                # 동기 커밋 (데이터 안정성)
+      -c archive_mode=on                      # WAL 아카이빙 활성화
+      -c archive_command='cp %p /var/lib/postgresql/archive/%f'  # WAL 아카이브 명령
+      -c log_replication_commands=on          # 복제 명령 로깅
+      -c shared_buffers=128MB
+      -c timezone=Asia/Seoul
+    shm_size: '256mb'
+    networks:
+      - replication_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d study_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────
+  # ■■■ Standby (슬레이브) 서버 ■■■
+  # ─────────────────────────────────────────────
+  standby:
+    image: postgres:16-alpine
+    container_name: pg-standby
+    restart: unless-stopped
+    environment:
+      PGDATA: /var/lib/postgresql/data/pgdata
+      POSTGRES_PASSWORD: postgres123
+      # ■■■ Primary 연결 정보 ■■■
+      PRIMARY_HOST: primary
+      PRIMARY_PORT: 5432
+      REPL_USER: replicator
+      REPL_PASSWORD: repl_secure_pw_2025
+    ports:
+      - "5433:5432"         # Standby 포트 (호스트에서 5433으로 접근)
+    volumes:
+      - standby_data:/var/lib/postgresql/data
+      # ■■■ Standby 초기화 스크립트 ■■■
+      - ./init-standby.sh:/init-standby.sh:ro
+    # ■■■ Standby 시작 절차 ■■■
+    # 1. pg_basebackup으로 Primary 데이터 복제
+    # 2. standby.signal 파일 생성 (Standby 모드 표시)
+    # 3. PostgreSQL 시작
+    entrypoint: >
+      bash -c "
+        if [ ! -f /var/lib/postgresql/data/pgdata/PG_VERSION ]; then
+          echo '■■■ Primary에서 기본 백업 수행 중... ■■■'
+          until pg_isready -h primary -p 5432 -U postgres; do
+            echo '■■■ Primary 대기 중...'
+            sleep 2
+          done
+          pg_basebackup -h primary -p 5432 -U replicator -D /var/lib/postgresql/data/pgdata -Fp -Xs -P -R
+          echo '■■■ 기본 백업 완료! ■■■'
+        fi
+        exec postgres
+        -c hot_standby=on
+        -c primary_conninfo='host=primary port=5432 user=replicator password=repl_secure_pw_2025'
+        -c shared_buffers=128MB
+        -c timezone=Asia/Seoul
+      "
+    depends_on:
+      primary:
+        condition: service_healthy
+    networks:
+      - replication_net
+
+# ■■■ 볼륨 ■■■
+volumes:
+  primary_data:
+    driver: local
+  standby_data:
+    driver: local
+
+# ■■■ 네트워크 ■■■
+networks:
+  replication_net:
+    driver: bridge

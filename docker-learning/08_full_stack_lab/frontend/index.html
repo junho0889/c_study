@@ -1,0 +1,84 @@
+<!-- ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■ -->
+<!-- ■ 파일명: index.html                                      -->
+<!-- ■ 목적: 풀스택 실습용 프론트엔드 페이지                       -->
+<!-- ■ 설명: API 호출 + 결과 표시하는 간단한 SPA                   -->
+<!-- ■ 날짜: 2026-03-21                                        -->
+<!-- ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■ -->
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Docker Full Stack Lab</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background: #1a1a2e; color: #eee; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        h1 { color: #0fbcf9; margin-bottom: 20px; }
+        .card { background: #16213e; border-radius: 8px; padding: 20px; margin: 10px 0; }
+        .card h3 { color: #0fbcf9; margin-bottom: 10px; }
+        .btn { background: #0fbcf9; color: #1a1a2e; border: none; padding: 10px 20px;
+               border-radius: 4px; cursor: pointer; font-size: 14px; margin: 5px; }
+        .btn:hover { background: #0da8e0; }
+        #output { background: #0a0a1a; padding: 15px; border-radius: 4px;
+                  font-family: monospace; white-space: pre-wrap; max-height: 400px; overflow-y: auto; }
+        .status { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; }
+        .healthy { background: #2ed573; color: #000; }
+        .unhealthy { background: #ff4757; color: #fff; }
+        input { padding: 10px; border: 1px solid #333; background: #0a0a1a;
+                color: #eee; border-radius: 4px; margin: 5px; width: 200px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Docker Full Stack Lab</h1>
+
+        <div class="card">
+            <h3>API Status</h3>
+            <button class="btn" onclick="checkHealth()">Health Check</button>
+            <button class="btn" onclick="getApiInfo()">API Info</button>
+            <button class="btn" onclick="getStats()">Stats</button>
+        </div>
+
+        <div class="card">
+            <h3>Items CRUD</h3>
+            <button class="btn" onclick="getItems()">Get Items</button>
+            <input type="text" id="itemName" placeholder="Item name">
+            <input type="text" id="itemDesc" placeholder="Description">
+            <button class="btn" onclick="createItem()">Create Item</button>
+        </div>
+
+        <div class="card">
+            <h3>Response</h3>
+            <div id="output">Click a button to make an API call...</div>
+        </div>
+    </div>
+
+    <script>
+        const output = document.getElementById('output');
+        async function apiCall(url, options = {}) {
+            try {
+                const res = await fetch(url, options);
+                const data = await res.json();
+                output.textContent = JSON.stringify(data, null, 2);
+            } catch (e) {
+                output.textContent = 'Error: ' + e.message;
+            }
+        }
+        function checkHealth() { apiCall('/api/health'); }
+        function getApiInfo() { apiCall('/api/'); }
+        function getStats() { apiCall('/api/stats'); }
+        function getItems() { apiCall('/api/items'); }
+        function createItem() {
+            const name = document.getElementById('itemName').value;
+            const desc = document.getElementById('itemDesc').value;
+            if (!name) { output.textContent = 'Name is required!'; return; }
+            apiCall('/api/items', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name, description: desc})
+            });
+        }
+    </script>
+</body>
+</html>

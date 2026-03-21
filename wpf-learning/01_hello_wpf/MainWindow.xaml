@@ -1,0 +1,45 @@
+<Window x:Class="LessonWpf.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="WPF 첫 화면"
+        Height="320"
+        Width="460">
+    <!--
+      XAML은 화면 설계도입니다.
+      집을 짓기 전에 도면을 그리듯이,
+      버튼, 글자, 여백이 어디에 놓일지 먼저 적습니다.
+    -->
+    <StackPanel Margin="24">
+        <TextBlock FontSize="24"
+                   FontWeight="Bold"
+                   Text="WPF 교과서 예제" />
+
+        <TextBlock Margin="0,12,0,0"
+                   TextWrapping="Wrap"
+                   Text="XAML은 화면 모양을 적는 곳이고, code-behind는 버튼이 눌렸을 때 어떤 일이 일어날지 적는 곳입니다." />
+
+        <Border Margin="0,16,0,0"
+                Padding="16"
+                BorderBrush="#FF4A7A5C"
+                BorderThickness="2"
+                CornerRadius="12"
+                Background="#FFF3FAF5">
+            <StackPanel>
+                <TextBlock x:Name="MessageText"
+                           FontSize="18"
+                           FontWeight="SemiBold"
+                           Text="창이 열리면 초기 레슨이 실행됩니다." />
+
+                <TextBlock x:Name="HintText"
+                           Margin="0,8,0,0"
+                           TextWrapping="Wrap"
+                           Text="버튼을 눌러 이벤트 흐름이 code-behind 메서드와 어떻게 이어지는지 확인해 보세요." />
+            </StackPanel>
+        </Border>
+
+        <Button Margin="0,16,0,0"
+                Height="42"
+                Content="이벤트 레슨 실행"
+                Click="ShowMessageButton_Click" />
+    </StackPanel>
+</Window>

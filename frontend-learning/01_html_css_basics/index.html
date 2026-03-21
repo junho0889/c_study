@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>프론트엔드 01 - HTML/CSS 기초</title>
+  <style>
+    /*
+      CSS 는 "꾸미기 언어"입니다.
+      HTML 이 집의 뼈대라면, CSS 는 벽지와 페인트와 가구 배치라고 생각하면 쉽습니다.
+    */
+    :root {
+      --bg: #f6f0e8;
+      --card: #fffaf4;
+      --ink: #1f2a2e;
+      --point: #d46a32;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Malgun Gothic", sans-serif;
+      background: radial-gradient(circle at top, #fff6df, var(--bg));
+      color: var(--ink);
+    }
+
+    .wrap {
+      max-width: 760px;
+      margin: 40px auto;
+      padding: 24px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 3px solid #f0c8a8;
+      border-radius: 28px;
+      padding: 24px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.08);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: var(--point);
+      color: white;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="card">
+      <span class="badge">프론트엔드 01</span>
+
+      <!--
+        h1 은 가장 중요한 제목입니다.
+        책 표지의 큰 제목이라고 생각하면 됩니다.
+      -->
+      <h1>HTML은 뼈대, CSS는 꾸미기</h1>
+
+      <!--
+        p 는 문단입니다.
+        설명 글을 적을 때 가장 많이 씁니다.
+      -->
+      <p>
+        집을 만들 때 먼저 벽과 문을 세우고, 그 다음 색칠을 하는 것처럼
+        웹페이지도 먼저 HTML로 구조를 만들고 CSS로 꾸밉니다.
+      </p>
+
+      <!--
+        ul 은 순서 없는 목록입니다.
+        점으로 나열되는 리스트라고 생각하면 됩니다.
+      -->
+      <ul>
+        <li>HTML: 화면에 무엇이 있는지 적는 설계도</li>
+        <li>CSS: 그 설계도를 예쁘게 꾸미는 도구</li>
+        <li>JavaScript: 버튼을 누르면 반응하게 만드는 도구</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

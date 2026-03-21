@@ -1,0 +1,22 @@
+# ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+# ■ 파일명: prometheus.yml
+# ■ 목적: Prometheus 메트릭 수집 설정
+# ■ 날짜: 2026-03-21
+# ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'fullstack-api'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['api:8000']
+        labels:
+          service: 'fullstack-api'
+          environment: 'development'

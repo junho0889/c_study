@@ -1,0 +1,3 @@
+app=snack_app
+entry=bin/main.dart
+mode=release

@@ -1,0 +1,142 @@
+# =============================================================================
+# Kubernetes 학습 06단계: HorizontalPodAutoscaler (HPA)
+# =============================================================================
+# 트래픽이 늘어나면 Pod를 자동으로 늘리고,
+# 트래픽이 줄어들면 Pod를 자동으로 줄이는 기능입니다.
+#
+# 비유: 놀이공원 매표소
+#   - 손님이 많으면 매표소 직원을 더 부릅니다 (scale up).
+#   - 손님이 줄면 직원을 쉬게 보냅니다 (scale down).
+#   - HPA는 이것을 자동으로 해주는 "관리자"입니다.
+#
+# 전제 조건: Metrics Server가 설치되어 있어야 합니다.
+#   kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+# =============================================================================
+
+---
+# ─────────────────────────────────────────────
+# 1. 대상 Deployment (오토스케일링 대상)
+# ─────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lesson-web-deployment
+spec:
+  replicas: 2            # 초기 복제본 수 (HPA가 자동 조절합니다)
+  selector:
+    matchLabels:
+      app: lesson-web
+  template:
+    metadata:
+      labels:
+        app: lesson-web
+    spec:
+      containers:
+        - name: lesson-web
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+          # ┌──────────────────────────────────────────┐
+          # │  resources: 자원 요청과 제한 (HPA 필수!)  │
+          # └──────────────────────────────────────────┘
+          # HPA가 "CPU 사용률"을 계산하려면
+          # requests 값이 반드시 있어야 합니다!
+          #
+          # 사용률 = 실제 사용량 / requests 값 x 100%
+          # 예: requests 100m, 실제 사용 70m → 사용률 70%
+          #
+          # 비유: 시험에서 몇 점을 받았는지 알려면
+          #       총점(requests)이 먼저 정해져 있어야 합니다.
+          resources:
+            requests:
+              cpu: 100m         # 0.1 코어 요청 (1000m = 1코어)
+              memory: 128Mi     # 128MB 메모리 요청
+            limits:
+              cpu: 200m         # 최대 0.2 코어
+              memory: 256Mi     # 최대 256MB
+
+---
+# ─────────────────────────────────────────────
+# 2. HorizontalPodAutoscaler
+# ─────────────────────────────────────────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: lesson-web-hpa
+spec:
+  # scaleTargetRef: 어떤 Deployment를 자동 스케일링할지
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: lesson-web-deployment
+
+  # ┌──────────────────────────────────────────┐
+  # │  최소/최대 복제본 수                      │
+  # └──────────────────────────────────────────┘
+  # 비유: "직원은 최소 2명, 최대 10명까지만 부를 수 있다"
+  minReplicas: 2         # 아무리 한가해도 최소 2개는 유지
+  maxReplicas: 10        # 아무리 바빠도 최대 10개까지만
+
+  # ┌──────────────────────────────────────────┐
+  # │  metrics: 스케일링 기준                   │
+  # └──────────────────────────────────────────┘
+  # 어떤 지표를 보고 Pod를 늘리거나 줄일지 정합니다.
+  metrics:
+    # CPU 사용률 기준
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          # Utilization: requests 대비 사용률 (%)
+          type: Utilization
+          # 평균 CPU 사용률이 50%를 넘으면 Pod를 늘립니다.
+          # 비유: "직원들이 평균적으로 절반 이상 바쁘면 사람을 더 부른다"
+          averageUtilization: 50
+
+    # 메모리 사용률 기준 (선택사항)
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 70   # 메모리 70% 이상이면 스케일 아웃
+
+  # ┌──────────────────────────────────────────┐
+  # │  behavior: 스케일링 동작 세부 제어        │
+  # └──────────────────────────────────────────┘
+  # 너무 빠르게 늘리거나 줄이면 시스템이 불안정해집니다.
+  # 비유: "1분에 직원 10명을 갑자기 부르면 혼란"이니까 천천히 늘리기
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60   # 60초 동안 관찰 후 결정
+      policies:
+        - type: Pods
+          value: 2                     # 한 번에 최대 2개씩 늘리기
+          periodSeconds: 60            # 60초마다 한 번씩
+    scaleDown:
+      stabilizationWindowSeconds: 300  # 5분 동안 관찰 후 줄이기 결정
+      # 줄이는 것은 신중하게! (너무 빨리 줄이면 다시 늘려야 할 수 있음)
+      policies:
+        - type: Pods
+          value: 1                     # 한 번에 최대 1개씩 줄이기
+          periodSeconds: 120           # 2분마다 한 번씩
+
+# =============================================================================
+# 사용 방법:
+#   kubectl apply -f hpa.yaml
+#   kubectl get hpa
+#   kubectl describe hpa lesson-web-hpa
+#
+# 부하 테스트 (Pod 안에서):
+#   kubectl run -i --tty load-generator --rm --image=busybox -- sh
+#   > while true; do wget -q -O- http://lesson-web-service; done
+#
+# 스케일링 관찰:
+#   kubectl get hpa --watch     ← 실시간으로 TARGETS/REPLICAS 변화 관찰
+#   kubectl get pods --watch    ← Pod 수 변화 관찰
+#
+# HPA 계산 공식:
+#   필요한 복제본 수 = ceil(현재 복제본 수 x (현재 메트릭 / 목표 메트릭))
+#   예: 현재 2개, CPU 80%, 목표 50%
+#       → ceil(2 x 80/50) = ceil(3.2) = 4개로 늘림
+# =============================================================================

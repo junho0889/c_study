@@ -1,0 +1,6 @@
+[package]
+name = "lesson_11_11_debugging"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]

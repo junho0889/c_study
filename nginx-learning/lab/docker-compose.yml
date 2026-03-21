@@ -1,0 +1,179 @@
+# ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+# ■■■ Nginx 로드밸런싱 + SSL 실습 환경 (Docker Compose)  ■■■
+# ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+#
+# 구성요소:
+#   1. nginx       - 리버스 프록시 / 로드밸런서 (포트 80, 443)
+#   2. app1        - Python Flask 백엔드 서버 #1
+#   3. app2        - Python Flask 백엔드 서버 #2
+#   4. app3        - Node.js Express 백엔드 서버 #3
+#   5. certbot     - Let's Encrypt SSL 인증서 자동 발급
+#
+# 실행 방법:
+#   docker-compose up -d --build
+#
+# 중지 방법:
+#   docker-compose down -v
+# ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+version: "3.9"  # Docker Compose 파일 버전 (3.9는 최신 안정 버전)
+
+# ■■■ 네트워크 정의 ■■■
+# 컨테이너 간 통신을 위한 사용자 정의 네트워크
+networks:
+  frontend:           # 프론트엔드 네트워크 (nginx <-> 외부)
+    driver: bridge    # bridge 드라이버: 같은 호스트 내 컨테이너 간 통신
+  backend:            # 백엔드 네트워크 (nginx <-> app 서버)
+    driver: bridge    # 백엔드 서버는 외부에서 직접 접근 불가
+    internal: true    # internal: true → 외부 인터넷 접근 차단 (보안 강화)
+
+# ■■■ 볼륨 정의 ■■■
+# 데이터 영속성을 위한 Docker 볼륨
+volumes:
+  certbot-etc:        # SSL 인증서 저장 볼륨 (/etc/letsencrypt)
+    driver: local     # 로컬 파일시스템에 저장
+  certbot-var:        # Certbot 작업 디렉토리 볼륨 (/var/lib/letsencrypt)
+    driver: local
+  nginx-logs:         # Nginx 로그 저장 볼륨
+    driver: local
+  nginx-cache:        # Nginx 캐시 저장 볼륨
+    driver: local
+
+# ■■■ 서비스 정의 ■■■
+services:
+
+  # ─────────────────────────────────────────────
+  # ■■■ Nginx 리버스 프록시 / 로드밸런서 ■■■
+  # ─────────────────────────────────────────────
+  nginx:
+    image: nginx:1.25-alpine  # Alpine 기반 경량 Nginx 이미지 (약 40MB)
+    container_name: nginx-lb  # 컨테이너 이름 지정 (docker logs nginx-lb 로 확인)
+    restart: unless-stopped   # 컨테이너 비정상 종료 시 자동 재시작 (수동 중지 제외)
+    ports:
+      - "80:80"               # HTTP 포트 매핑 (호스트:컨테이너)
+      - "443:443"             # HTTPS 포트 매핑 (SSL/TLS)
+      - "8080:8080"           # stub_status 모니터링 포트
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro       # 메인 설정 파일 (읽기 전용)
+      - ./conf.d:/etc/nginx/conf.d:ro               # 추가 설정 파일 디렉토리 (읽기 전용)
+      - certbot-etc:/etc/letsencrypt:ro              # SSL 인증서 (읽기 전용)
+      - certbot-var:/var/lib/letsencrypt             # Certbot 작업 디렉토리
+      - nginx-logs:/var/log/nginx                    # 로그 파일 영속 저장
+      - nginx-cache:/var/cache/nginx                 # 캐시 데이터 영속 저장
+    networks:
+      - frontend    # 외부 접근 가능한 프론트엔드 네트워크
+      - backend     # 백엔드 서버와 통신하는 내부 네트워크
+    depends_on:
+      - app1        # app1이 먼저 시작된 후 nginx 시작
+      - app2        # app2가 먼저 시작된 후 nginx 시작
+      - app3        # app3가 먼저 시작된 후 nginx 시작
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]  # nginx 설정 파일 문법 검사로 헬스체크
+      interval: 30s                  # 30초마다 헬스체크 실행
+      timeout: 10s                   # 10초 내 응답 없으면 실패
+      retries: 3                     # 3회 연속 실패 시 unhealthy 상태
+    logging:
+      driver: json-file      # JSON 형식 로그 드라이버
+      options:
+        max-size: "10m"       # 로그 파일 최대 크기 10MB
+        max-file: "3"         # 최대 3개 파일 로테이션
+
+  # ─────────────────────────────────────────────
+  # ■■■ 백엔드 앱 서버 #1 (Python Flask) ■■■
+  # ─────────────────────────────────────────────
+  app1:
+    build:
+      context: ./backend         # Dockerfile이 있는 디렉토리
+      dockerfile: Dockerfile     # 사용할 Dockerfile 이름
+    container_name: backend-app1 # 컨테이너 이름
+    restart: unless-stopped      # 비정상 종료 시 자동 재시작
+    environment:
+      - APP_NAME=app1            # 앱 식별용 환경 변수
+      - APP_PORT=5000            # Flask 서버 포트
+      - FLASK_ENV=production     # Flask 실행 환경 (production 모드)
+    expose:
+      - "5000"                   # 내부 네트워크에만 5000번 포트 노출 (외부 접근 불가)
+    networks:
+      - backend                  # 백엔드 네트워크에만 연결
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"            # CPU 사용량 0.5코어로 제한
+          memory: 256M           # 메모리 사용량 256MB로 제한
+
+  # ─────────────────────────────────────────────
+  # ■■■ 백엔드 앱 서버 #2 (Python Flask) ■■■
+  # ─────────────────────────────────────────────
+  app2:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: backend-app2
+    restart: unless-stopped
+    environment:
+      - APP_NAME=app2            # 두 번째 앱 서버 식별자
+      - APP_PORT=5000
+      - FLASK_ENV=production
+    expose:
+      - "5000"
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  # ─────────────────────────────────────────────
+  # ■■■ 백엔드 앱 서버 #3 (Node.js Express) ■■■
+  # ─────────────────────────────────────────────
+  app3:
+    image: node:20-alpine        # Node.js 20 Alpine 이미지
+    container_name: backend-app3
+    restart: unless-stopped
+    working_dir: /app             # 컨테이너 내 작업 디렉토리
+    command: >                    # 인라인으로 간단한 Express 서버 실행
+      sh -c "npm init -y > /dev/null 2>&1 &&
+             npm install express > /dev/null 2>&1 &&
+             node -e \"
+               const express = require('express');
+               const app = express();
+               app.get('/api/health', (req, res) => res.json({server: 'app3-node', status: 'healthy'}));
+               app.get('/api/data', (req, res) => res.json({server: 'app3-node', data: 'Hello from Node.js!', timestamp: new Date()}));
+               app.get('*', (req, res) => res.json({server: 'app3-node', path: req.path}));
+               app.listen(3000, () => console.log('Node app3 listening on port 3000'));
+             \""
+    expose:
+      - "3000"                   # Node.js는 3000번 포트 사용
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  # ─────────────────────────────────────────────
+  # ■■■ Certbot (Let's Encrypt SSL 인증서) ■■■
+  # ─────────────────────────────────────────────
+  certbot:
+    image: certbot/certbot:latest  # 최신 Certbot 이미지
+    container_name: certbot-ssl    # 컨테이너 이름
+    volumes:
+      - certbot-etc:/etc/letsencrypt       # 인증서 저장 위치
+      - certbot-var:/var/lib/letsencrypt   # Certbot 작업 디렉토리
+    depends_on:
+      - nginx                               # Nginx가 먼저 실행되어야 함
+    # ■■■ 인증서 발급 명령 (도메인은 실제 도메인으로 변경 필요) ■■■
+    # --webroot: 웹루트 방식으로 인증 (Nginx가 /.well-known/acme-challenge/ 경로 서빙)
+    # --agree-tos: 이용약관 동의
+    # --no-eff-email: EFF 뉴스레터 구독 안함
+    # --staging: 테스트용 (실제 발급 시 제거)
+    entrypoint: >
+      sh -c "echo '■■■ Certbot 대기 중... ■■■' &&
+             echo '실제 도메인이 있으면 아래 명령 실행:' &&
+             echo 'certbot certonly --webroot -w /var/lib/letsencrypt --email your@email.com -d yourdomain.com --agree-tos --no-eff-email --staging' &&
+             echo '인증서 갱신: certbot renew --dry-run' &&
+             tail -f /dev/null"
+    networks:
+      - frontend

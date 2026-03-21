@@ -1,0 +1,90 @@
+# ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+# ■■■ TimescaleDB 학습 환경                            ■■■
+# ■■■ 시계열 데이터 처리를 위한 PostgreSQL 확장         ■■■
+# ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+#
+# TimescaleDB: PostgreSQL 위에 구축된 시계열 데이터베이스
+# 용도: IoT 센서, 모니터링, 금융 데이터, 로그 분석
+#
+# 실행: docker-compose up -d
+# 접속: psql -h localhost -p 5432 -U postgres -d timescale_db
+# ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+version: "3.9"
+
+services:
+
+  # ─────────────────────────────────────────────
+  # ■■■ TimescaleDB 서버 ■■■
+  # ─────────────────────────────────────────────
+  timescaledb:
+    # TimescaleDB 공식 이미지 (PostgreSQL 16 기반)
+    image: timescale/timescaledb:latest-pg16
+    container_name: timescaledb-study
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: timescale_db         # 기본 데이터베이스
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+      PGDATA: /var/lib/postgresql/data/pgdata
+      TZ: Asia/Seoul                    # 타임존
+    ports:
+      - "5432:5432"
+    volumes:
+      - tsdb_data:/var/lib/postgresql/data
+      # 초기화 SQL: TimescaleDB 확장 설치 및 테이블 생성
+      - ./timescale.sql:/docker-entrypoint-initdb.d/01_timescale.sql:ro
+    command: >
+      postgres
+      -c shared_buffers=256MB                     # 공유 버퍼 (RAM의 25%)
+      -c work_mem=16MB                            # 정렬/해시 작업 메모리
+      -c maintenance_work_mem=128MB               # VACUUM, 인덱스 생성 시 메모리
+      -c effective_cache_size=512MB               # OS 캐시 예상 크기
+      -c max_connections=100                      # 최대 연결 수
+      -c timescaledb.max_background_workers=4     # TimescaleDB 백그라운드 워커
+      -c max_worker_processes=8                   # 최대 워커 프로세스
+      -c max_parallel_workers_per_gather=2        # 병렬 쿼리 워커
+      -c max_parallel_workers=4                   # 전체 병렬 워커
+      -c log_statement=all                        # 모든 SQL 로깅 (학습용)
+      -c timezone=Asia/Seoul
+    shm_size: '512mb'                             # 공유 메모리 크기
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d timescale_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - tsdb_network
+
+  # ─────────────────────────────────────────────
+  # ■■■ Grafana (시각화 대시보드) ■■■
+  # ─────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana-tsdb
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin        # Grafana 관리자 계정
+      GF_SECURITY_ADMIN_PASSWORD: admin123 # Grafana 관리자 비밀번호
+    ports:
+      - "3000:3000"                         # Grafana 웹 UI
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    networks:
+      - tsdb_network
+
+# ■■■ 볼륨 ■■■
+volumes:
+  tsdb_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# ■■■ 네트워크 ■■■
+networks:
+  tsdb_network:
+    driver: bridge

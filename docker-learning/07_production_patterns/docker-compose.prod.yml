@@ -1,0 +1,219 @@
+# ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+# ■ 파일명: docker-compose.prod.yml
+# ■ 목적: 프로덕션 환경용 Docker Compose 설정
+# ■ 설명: 리소스 제한, 로깅, 재시작 정책, 보안 강화
+# ■ 실행: docker-compose -f docker-compose.prod.yml up -d
+# ■ 날짜: 2026-03-21
+# ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+# ── 프로덕션 환경의 핵심 원칙 ──
+# 1. 리소스 제한: 하나의 컨테이너가 모든 리소스를 차지하면 안 돼
+# 2. 로깅: 로그가 무한히 쌓이면 디스크가 터져
+# 3. 재시작: 에러가 나도 자동으로 복구되어야 해
+# 4. 보안: 최소 권한 원칙
+# 5. 헬스체크: 문제를 빨리 발견해야 해
+
+services:
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # Nginx 리버스 프록시
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: prod-nginx
+    ports:
+      - "80:80"                              # HTTP
+      - "443:443"                            # HTTPS
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro        # SSL 인증서 (읽기 전용)
+    # ── deploy: 배포 관련 설정 ──
+    # Docker Compose에서도 일부 deploy 옵션을 사용할 수 있어
+    deploy:
+      # ── resources: 리소스 제한 ──
+      # 하나의 컨테이너가 서버의 모든 리소스를 사용하면 안 돼!
+      resources:
+        limits:
+          cpus: '1.0'                        # 최대 CPU 1코어
+          memory: 256M                       # 최대 메모리 256MB
+        reservations:
+          cpus: '0.25'                       # 최소 CPU 보장
+          memory: 64M                        # 최소 메모리 보장
+      # ── restart_policy: 재시작 정책 ──
+      restart_policy:
+        condition: any                       # 어떤 이유로든 종료되면 재시작
+        delay: 5s                            # 재시작 전 5초 대기
+        max_attempts: 5                      # 최대 5번 재시도
+        window: 120s                         # 120초 안에 재시작 성공 판단
+    # ── logging: 로그 설정 ──
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"                      # 파일당 최대 10MB
+        max-file: "5"                        # 최대 5개 파일 (총 50MB)
+        tag: "nginx|{{.Name}}"              # 로그에 서비스 식별 태그
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      web:
+        condition: service_healthy
+    networks:
+      - frontend
+    # ── read_only: 파일시스템 읽기 전용 ──
+    # 컨테이너가 파일을 수정할 수 없게 해 (보안!)
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx                     # Nginx 캐시는 메모리에
+      - /var/run                             # PID 파일용
+      - /tmp
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # 웹 애플리케이션
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  web:
+    image: myapp:${APP_VERSION:-latest}      # 버전 태그 사용!
+    container_name: prod-web
+    environment:
+      - APP_ENV=production                   # 프로덕션 모드!
+      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD}@db:5432/myapp
+      - REDIS_URL=redis://redis:6379/0
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'                        # 최대 CPU 2코어
+          memory: 1G                         # 최대 메모리 1GB
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+      restart_policy:
+        condition: on-failure                # 에러로 종료될 때만 재시작
+        delay: 10s
+        max_attempts: 10
+        window: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "10"
+        tag: "webapp|{{.Name}}"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # ── security_opt: 보안 옵션 ──
+    security_opt:
+      - no-new-privileges:true               # 권한 상승 금지
+    networks:
+      - frontend
+      - backend
+    expose:
+      - "8000"
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # PostgreSQL 데이터베이스
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  db:
+    image: postgres:16-alpine
+    container_name: prod-db
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${DB_PASSWORD}     # 환경변수로 비밀번호 관리
+      - POSTGRES_DB=myapp
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G                         # DB는 메모리를 많이 쓰니까
+        reservations:
+          cpus: '1.0'
+          memory: 512M
+      restart_policy:
+        condition: any
+        delay: 10s
+        max_attempts: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d myapp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - backend
+    # DB는 외부 포트를 열지 않아! (보안)
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # Redis 캐시
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  redis:
+    image: redis:7-alpine
+    container_name: prod-redis
+    command: >
+      redis-server
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD:-changeme}
+    volumes:
+      - redis-data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 768M                       # maxmemory + 오버헤드
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+      restart_policy:
+        condition: any
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-changeme}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - backend
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# volumes
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+volumes:
+  db-data:
+    driver: local
+    name: prod-db-data
+  redis-data:
+    driver: local
+    name: prod-redis-data
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# networks
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+networks:
+  frontend:
+    driver: bridge
+    name: prod-frontend
+  backend:
+    driver: bridge
+    name: prod-backend
