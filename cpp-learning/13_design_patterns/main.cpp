@@ -327,9 +327,23 @@ int main() {
     cout << "└──────────────────────────────────────┘\n\n";
 
     Logger::instance().log("게임 시작");
+    // → 첫 호출: static Logger inst 생성 (생성자 1번만 호출)
+    //   → "[Logger 생성됨 - 딱 한 번만 호출됨]" 출력
+    //   → log: logs_=["게임 시작"], "[LOG] 게임 시작" 출력
     Logger::instance().log("플레이어 생성");
+    // → 같은 인스턴스. logs_ = ["게임 시작", "플레이어 생성"]
     Logger::instance().log("맵 로딩 완료");
+    // → logs_.size() = 3
     Logger::instance().show_all();
+    // > 출력 (이 패턴 전체):
+    //   [Logger 생성됨 - 딱 한 번만 호출됨]
+    //   [LOG] 게임 시작
+    //   [LOG] 플레이어 생성
+    //   [LOG] 맵 로딩 완료
+    //   --- 전체 로그 (3건) ---
+    //   > 게임 시작
+    //   > 플레이어 생성
+    //   > 맵 로딩 완료
     cout << endl;
 
     // ── 패턴 2: 팩토리 ──
@@ -339,12 +353,22 @@ int main() {
 
     vector<string> enemy_types = {"goblin", "dragon", "skeleton", "goblin"};
     for (const auto& type : enemy_types) {
+        // 1회: type="goblin"  → Goblin 생성
+        // 2회: type="dragon"  → Dragon
+        // 3회: type="skeleton"→ Skeleton
+        // 4회: type="goblin"  → Goblin (또 새로 생성)
         auto enemy = create_enemy(type);
         if (enemy) {
             cout << "    생성: " << enemy->name() << " → ";
             enemy->attack();
         }
+        // ▶ 루프 끝 → unique_ptr 소멸 → Enemy 소멸자 호출
     }
+    // > 출력:
+    //     생성: 고블린 → 고블린이 곤봉으로 때린다!
+    //     생성: 드래곤 → 드래곤이 불을 뿜는다!
+    //     생성: 스켈레톤 → 스켈레톤이 뼈를 던진다!
+    //     생성: 고블린 → 고블린이 곤봉으로 때린다!
     cout << endl;
 
     // ── 패턴 3: 옵저버 ──
@@ -362,10 +386,21 @@ int main() {
     events.subscribe("enemy_killed", &achievement);
     events.subscribe("level_up", &sound);
     events.subscribe("level_up", &ui);
+    // → subscribers_["enemy_killed"] = [&sound, &ui, &achievement]
+    // → subscribers_["level_up"]      = [&sound, &ui]
 
     events.emit("enemy_killed", "드래곤 처치!");
+    // ▶ 3개 구독자 모두에게 호출 (등록 순서대로)
+    // > 출력:
+    //     [사운드] enemy_killed → 효과음 재생: 드래곤 처치!
+    //     [UI] enemy_killed → 화면 업데이트: 드래곤 처치!
+    //     [업적] enemy_killed → 업적 체크: 드래곤 처치!
     cout << endl;
     events.emit("level_up", "레벨 10 달성!");
+    // ▶ 2개 구독자
+    // > 출력:
+    //     [사운드] level_up → 효과음 재생: 레벨 10 달성!
+    //     [UI] level_up → 화면 업데이트: 레벨 10 달성!
     cout << endl;
 
     // ── 패턴 4: 전략 ──
@@ -378,16 +413,26 @@ int main() {
 
     sorter.set_strategy(make_unique<BubbleSort>());
     sorter.sort(data);
+    // → 버블 정렬: 인접 비교 + 큰 값 뒤로
+    // → data = [1, 2, 3, 5, 8, 9]
     cout << "    결과: ";
     for (int n : data) cout << n << " ";
     cout << "\n\n";
+    // > 출력:
+    //     [버블 정렬] 실행
+    //     결과: 1 2 3 5 8 9
 
-    data = {5, 2, 8, 1, 9, 3};  // 다시 섞기
+    data = {5, 2, 8, 1, 9, 3};
     sorter.set_strategy(make_unique<SelectionSort>());
     sorter.sort(data);
+    // → 선택 정렬: 매 회 최소값 찾아 앞으로
+    // → data = [1, 2, 3, 5, 8, 9]
     cout << "    결과: ";
     for (int n : data) cout << n << " ";
     cout << "\n\n";
+    // > 출력:
+    //     [선택 정렬] 실행
+    //     결과: 1 2 3 5 8 9
 
     // ── 패턴 5: 빌더 ──
     cout << "┌──────────────────────────────────────┐\n";
@@ -402,8 +447,20 @@ int main() {
         .body(R"({"name": "홍길동", "age": 25})")
         .timeout(3000)
         .build();
+    // → 체이닝으로 단계별 설정.
+    //   final request:
+    //     method="POST", url="/api/users",
+    //     headers={"Authorization":"Bearer token123",
+    //              "Content-Type":"application/json"},  // map은 키 정렬됨
+    //     body=R"...", timeout_ms=3000
 
     request.print();
+    // > 출력:
+    //     POST /api/users
+    //     Authorization: Bearer token123
+    //     Content-Type: application/json
+    //     Body: {"name": "홍길동", "age": 25}
+    //     Timeout: 3000ms
     cout << endl;
 
     // ── 패턴 6: RAII ──
@@ -413,9 +470,12 @@ int main() {
 
     {
         Timer t("데이터 처리");
+        // > 출력:   [Timer] 데이터 처리 시작
         cout << "    ... 작업 중 ...\n";
-        // 블록 끝에서 Timer 소멸자가 자동 호출
+        // > 출력:   ... 작업 중 ...
     }
+    // ▶ 블록 종료 → t 소멸자
+    // > 출력:   [Timer] 데이터 처리 종료 (자동 정리!)
     cout << endl;
 
     // ── 패턴 정리 ──

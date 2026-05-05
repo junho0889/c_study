@@ -1,0 +1,57 @@
+# =============================================================================
+#  Alpine + 정적 링크 + scratch 베이스 = 초소형 이미지
+#  결과물: 수 MB 정적 바이너리 + scratch = 5~10MB 이미지
+# =============================================================================
+#  주의:
+#    musl libc 사용 → glibc 의존 코드 / 라이브러리 호환성 검증 필요
+#    DNS / TLS 인증서는 직접 포함시켜야 함
+# =============================================================================
+
+# ==== Stage 1 : Alpine builder ====
+FROM alpine:3.19 AS builder
+
+RUN apk add --no-cache \
+        build-base \
+        cmake \
+        ninja \
+        linux-headers
+
+WORKDIR /src
+COPY . /src
+
+# 정적 링크 - libstdc++ / libgcc / libc 모두 정적
+RUN cmake -GNinja -B /tmp/build \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_CXX_FLAGS="-static -static-libstdc++ -static-libgcc" \
+        -DCMAKE_EXE_LINKER_FLAGS="-static" \
+ && cmake --build /tmp/build --parallel
+
+# 의존성 확인 - "not a dynamic executable" 나와야 정적
+RUN ldd /tmp/build/myapp 2>&1 | grep -q "not a dynamic" || \
+    (echo "ERROR: still dynamic" && exit 1)
+
+# strip
+RUN strip --strip-all /tmp/build/myapp
+
+# ==== Stage 2 : scratch ====
+# scratch는 진짜로 비어있음 (init도 없음). 정적 바이너리만 둠.
+FROM scratch
+
+# TLS 통신 시 인증서 필요
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+# 타임존 (시간 처리하면)
+COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
+ENV TZ=Asia/Seoul
+
+# 바이너리
+COPY --from=builder /tmp/build/myapp /myapp
+
+# scratch엔 사용자 없음 - uid:gid 직접 지정
+USER 65532:65532
+
+ENTRYPOINT ["/myapp"]
+
+# 결과 이미지 크기 확인:
+#   docker images | grep myapp
+#   → 보통 5~15MB

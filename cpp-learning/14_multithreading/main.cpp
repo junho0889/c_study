@@ -88,15 +88,27 @@ void lesson1_thread_basics() {
     cout << "  ■ 스레드 생성과 join\n";
     cout << "  ─────────────────────────────────────\n";
 
-    thread t1(worker, 1, 3);   // 스레드 생성 → 바로 실행 시작!
-    thread t2(worker, 2, 3);
+    thread t1(worker, 1, 3);   // → t1 시작 (id=1, count=3)
+    thread t2(worker, 2, 3);   // → t2 시작 (id=2, count=3)
 
-    // ★ join() = 스레드가 끝날 때까지 기다림
-    //   join 안 하면? → 프로그램 비정상 종료! (terminate 호출)
     t1.join();
     t2.join();
+    // ▶ 출력 순서는 비결정적 (스레드 인터리빙)
+    // > 출력 예 1 (인터리빙):
+    //     스레드 1: 작업 1
+    //     스레드 2: 작업 1
+    //     스레드 1: 작업 2
+    //     스레드 2: 작업 2
+    //     스레드 1: 작업 3
+    //     스레드 2: 작업 3
+    // > 출력 예 2 (다른 인터리빙):
+    //     스레드 2: 작업 1
+    //     스레드 1: 작업 1
+    //     ...
+    //   ※ cout 자체도 동기화 안 됨 → 한 줄이 다른 줄과 섞일 수도
 
     cout << "  두 스레드 모두 완료!\n\n";
+    // > 출력:   두 스레드 모두 완료!
 
     // ── detach: 스레드를 분리 (백그라운드 실행) ──
     //
@@ -109,6 +121,8 @@ void lesson1_thread_basics() {
     // ── 하드웨어 동시성 확인 ──
     cout << "  이 컴퓨터의 코어 수: "
          << thread::hardware_concurrency() << "\n";
+    // → 시스템 따라 다름. 일반 데스크톱: 4, 8, 16
+    // > 출력 예:   이 컴퓨터의 코어 수: 8
     cout << endl;
 }
 
@@ -140,18 +154,23 @@ void lesson2_mutex() {
         int counter = 0;
         auto increment = [&counter]() {
             for (int i = 0; i < 100000; i++) {
-                counter++;   // 데이터 경쟁!
+                counter++;
+                // ★ counter++는 read-modify-write 3단계.
+                //   두 스레드가 같은 시점에 read → 같은 결과 write → 1회 손실
             }
         };
         thread t1(increment);
         thread t2(increment);
         t1.join();
         t2.join();
+        // → counter는 200000 미만일 가능성 높음 (UB이므로 정확한 값 보장 X)
         cout << "    기대값: 200000, 실제값: " << counter
              << " (다를 수 있음!)\n\n";
+        // > 출력 예:   기대값: 200000, 실제값: 145823 (다를 수 있음!)
+        //   ※ 시스템/컴파일러에 따라 200000이 나올 수도 있음 (운 좋으면)
+        //     단, UB이므로 의존하면 안 됨
     }
 
-    // ── 해결: 뮤텍스 사용 ──
     cout << "  ■ 해결: lock_guard + mutex\n";
     {
         int counter = 0;
@@ -159,9 +178,8 @@ void lesson2_mutex() {
 
         auto safe_increment = [&counter, &mtx]() {
             for (int i = 0; i < 100000; i++) {
-                // lock_guard = RAII 스타일 잠금
-                // 생성 시 잠금, 소멸 시(스코프 끝) 자동 해제
                 lock_guard<mutex> lock(mtx);
+                // → 한 시점에 한 스레드만 진입. 다른 스레드는 대기.
                 counter++;
             }
         };
@@ -169,7 +187,9 @@ void lesson2_mutex() {
         thread t2(safe_increment);
         t1.join();
         t2.join();
+        // → counter = 200000 항상 보장
         cout << "    기대값: 200000, 실제값: " << counter << " (정확!)\n\n";
+        // > 출력:   기대값: 200000, 실제값: 200000 (정확!)
     }
 
     // ─── lock_guard vs unique_lock ───
@@ -224,20 +244,27 @@ void lesson3_atomic() {
 
     cout << "  atomic<int> counter = " << counter
          << " (정확히 200000!)\n";
+    // > 출력:   atomic<int> counter = 200000 (정확히 200000!)
 
-    // ── atomic 주요 연산 ──
     cout << "\n  ■ atomic 주요 연산\n";
     cout << "  ─────────────────────────────────────\n";
 
     atomic<int> val{10};
     cout << "  load()       = " << val.load() << "  (값 읽기)\n";
+    // > 출력:   load()       = 10  (값 읽기)
     val.store(20);
+    // → val = 20
     cout << "  store(20)    = " << val.load() << "  (값 쓰기)\n";
+    // > 출력:   store(20)    = 20  (값 쓰기)
     int old = val.exchange(30);
+    // → 이전값 20 반환, val = 30
     cout << "  exchange(30) → 이전값=" << old
          << ", 현재값=" << val.load() << "\n";
+    // > 출력:   exchange(30) → 이전값=20, 현재값=30
     val.fetch_add(5);
+    // → val = 30 + 5 = 35
     cout << "  fetch_add(5) = " << val.load() << "\n";
+    // > 출력:   fetch_add(5) = 35
 
     // ── atomic<bool>: 플래그로 자주 사용 ──
     atomic<bool> running{true};
@@ -281,16 +308,24 @@ void lesson4_async_future() {
 
     // async로 비동기 실행 → future 반환
     future<long long> result1 = async(launch::async, heavy_calc, 1000000);
+    // → 새 스레드에서 heavy_calc(1000000) 시작
+    //   1+2+...+1000000 = 500000500000
     future<long long> result2 = async(launch::async, heavy_calc, 2000000);
+    // → 1+2+...+2000000 = 2000001000000
 
     cout << "    (다른 작업 수행 중...)\n";
+    // > 출력 (도중 인터리빙 가능):
+    //     (계산 시작: 1000000의 합)
+    //     (계산 시작: 2000000의 합)
+    //     (다른 작업 수행 중...)
 
-    // get()으로 결과 대기 + 받기  (결과 나올 때까지 블록)
-    long long sum1 = result1.get();
-    long long sum2 = result2.get();
+    long long sum1 = result1.get();   // → 500000500000
+    long long sum2 = result2.get();   // → 2000001000000
 
     cout << "    결과1: " << sum1 << "\n";
+    // > 출력:     결과1: 500000500000
     cout << "    결과2: " << sum2 << "\n\n";
+    // > 출력:     결과2: 2000001000000
 
     // ── launch 정책 ──
     //
@@ -304,15 +339,19 @@ void lesson4_async_future() {
 
     promise<string> prom;
     future<string> fut = prom.get_future();
+    // → fut는 prom이 set_value할 때까지 대기 가능
 
     thread t([&prom]() {
         this_thread::sleep_for(chrono::milliseconds(50));
         prom.set_value("스레드에서 보낸 메시지!");
+        // → fut.get()이 깨어남
     });
 
     cout << "    대기 중...\n";
-    string msg = fut.get();
+    // > 출력:     대기 중...
+    string msg = fut.get();   // → 50ms 대기 후 "스레드에서 보낸 메시지!"
     cout << "    받은 값: " << msg << "\n";
+    // > 출력:     받은 값: 스레드에서 보낸 메시지!
     t.join();
     cout << endl;
 }
@@ -330,18 +369,22 @@ void lesson5_practical() {
 
     const int SIZE = 10000000;
     vector<int> data(SIZE);
-    for (int i = 0; i < SIZE; i++) data[i] = 1;  // 전부 1
+    for (int i = 0; i < SIZE; i++) data[i] = 1;
+    // → data: [1, 1, 1, ..., 1] (1천만 개)
+    //   기대 합 = SIZE = 10000000
 
     int num_threads = 4;
 
-    // ── 단일 스레드 합산 ──
     auto start = chrono::high_resolution_clock::now();
     long long single_sum = 0;
     for (int val : data) single_sum += val;
+    // → single_sum = 10000000
     auto end = chrono::high_resolution_clock::now();
     auto single_ms = chrono::duration_cast<chrono::milliseconds>(end - start).count();
     cout << "  단일 스레드: 합=" << single_sum
          << " (" << single_ms << "ms)\n";
+    // > 출력 예:   단일 스레드: 합=10000000 (15ms)
+    //   ※ ms 값은 환경에 따라 5~50ms로 변동
 
     // ── 병렬 합산 ──
     start = chrono::high_resolution_clock::now();
@@ -362,11 +405,15 @@ void lesson5_practical() {
 
     long long parallel_sum = 0;
     for (auto& f : futures) parallel_sum += f.get();
+    // → 4개 스레드 결과: 각 2500000씩 (1천만/4)
+    // → 합계 10000000
 
     end = chrono::high_resolution_clock::now();
     auto parallel_ms = chrono::duration_cast<chrono::milliseconds>(end - start).count();
     cout << "  병렬(" << num_threads << "스레드): 합=" << parallel_sum
          << " (" << parallel_ms << "ms)\n\n";
+    // > 출력 예:   병렬(4스레드): 합=10000000 (4ms)
+    //   ※ 스레드 시작 비용 때문에 4배 빠르진 않음. 보통 2~3배.
 
     // ── 멀티스레딩 체크리스트 ──
     cout << "  ■ 멀티스레딩 체크리스트\n";

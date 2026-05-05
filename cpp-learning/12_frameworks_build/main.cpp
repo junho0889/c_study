@@ -248,12 +248,24 @@ void lesson3_frameworks() {
         {"spdlog",        "로깅",   "고속 로깅"},
         {"fmt",           "포맷",   "문자열 포맷팅"},
     };
+    // → libs.size() = 9
 
     cout << "  주요 라이브러리 요약:\n\n";
     for (const auto& lib : libs) {
+        // 9회 반복, 입력 순서대로 출력
         cout << "  [" << lib.category << "] "
              << lib.name << " - " << lib.description << "\n";
     }
+    // > 출력:
+    //   [GUI] Qt - 크로스 플랫폼 GUI 프레임워크
+    //   [게임] SDL2/SFML - 2D 게임 / 멀티미디어
+    //   [게임] Unreal Engine - AAA 게임 엔진
+    //   [유틸] Boost - C++ 확장 라이브러리 모음
+    //   [데이터] nlohmann/json - JSON 파싱/생성
+    //   [영상] OpenCV - 컴퓨터 비전
+    //   [테스트] GoogleTest - 단위 테스트 프레임워크
+    //   [로깅] spdlog - 고속 로깅
+    //   [포맷] fmt - 문자열 포맷팅
     cout << endl;
 }
 
@@ -324,13 +336,20 @@ void lesson4_testing() {
         }
     };
 
-    // 테스트할 함수
     auto add = [](int a, int b) { return a + b; };
 
     assert_eq(add(2, 3), 5, "2+3=5");
+    // → add(2,3) = 5, expected 5 → 일치 → PASS
+    // > 출력:   [PASS] 2+3=5
     assert_eq(add(-1, 1), 0, "-1+1=0");
+    // → -1+1=0 → PASS
+    // > 출력:   [PASS] -1+1=0
     assert_eq(add(0, 0), 0, "0+0=0");
+    // → 0+0=0 → PASS
+    // > 출력:   [PASS] 0+0=0
     assert_eq(add(100, -100), 0, "100+(-100)=0");
+    // → 0 → PASS
+    // > 출력:   [PASS] 100+(-100)=0
 
     cout << endl;
 }

@@ -214,14 +214,28 @@ int main() {
     cout << "  ─────────────────────────────────────\n";
 
     test.assert_eq(Calculator::add(2, 3), 5, "2 + 3 = 5");
+    // → add(2,3)=5, expected=5 → PASS. total=1, passed=1
+    // > 출력:   [PASS] 2 + 3 = 5
     test.assert_eq(Calculator::add(-1, 1), 0, "-1 + 1 = 0");
+    // → 0=0 → PASS. total=2, passed=2
     test.assert_eq(Calculator::add(0, 0), 0, "0 + 0 = 0");
     test.assert_eq(Calculator::sub(10, 3), 7, "10 - 3 = 7");
     test.assert_eq(Calculator::mul(4, 5), 20, "4 * 5 = 20");
     test.assert_eq(Calculator::mul(-2, 3), -6, "-2 * 3 = -6");
     test.assert_near(Calculator::div(10, 3), 3.333, 0.01, "10 / 3 ~ 3.33");
+    // → div(10,3) = 3.33333..., |3.333-3.33333| = 0.00033 < 0.01 → PASS
     test.assert_throws<invalid_argument>(
         []() { Calculator::div(10, 0); }, "10 / 0 예외 발생");
+    // → div(10, 0) → invalid_argument throw → 매치 → PASS
+    // > 출력 (이 8개):
+    //   [PASS] 2 + 3 = 5
+    //   [PASS] -1 + 1 = 0
+    //   [PASS] 0 + 0 = 0
+    //   [PASS] 10 - 3 = 7
+    //   [PASS] 4 * 5 = 20
+    //   [PASS] -2 * 3 = -6
+    //   [PASS] 10 / 3 ~ 3.33
+    //   [PASS] 10 / 0 예외 발생
 
     cout << endl;
 
@@ -230,16 +244,24 @@ int main() {
     cout << "  ─────────────────────────────────────\n";
 
     test.assert_eq(StringUtils::to_upper("hello"), string("HELLO"), "to_upper");
+    // → to_upper("hello")="HELLO" → PASS
     test.assert_eq(StringUtils::to_upper("Hello123"), string("HELLO123"), "to_upper mixed");
+    // → "HELLO123" (숫자는 -32 적용 안 됨, 'h'~'z'만)
     test.assert_eq(StringUtils::trim("  hello  "), string("hello"), "trim");
+    // → trim 결과 "hello" (좌우 공백 제거)
     test.assert_eq(StringUtils::trim(""), string(""), "trim empty");
+    // → 빈 문자열 → "" 반환 → PASS
     test.assert_true(StringUtils::starts_with("hello world", "hello"), "starts_with true");
+    // → 처음 5글자가 "hello" → true → PASS
     test.assert_false(StringUtils::starts_with("hello", "world"), "starts_with false");
+    // → "hello"는 "world"로 시작 안 함 → false 받아 assert_false 통과
 
     auto parts = StringUtils::split("a,b,c", ',');
+    // → parts = ["a", "b", "c"], size=3
     test.assert_eq(parts.size(), (size_t)3, "split count");
     test.assert_eq(parts[0], string("a"), "split first");
     test.assert_eq(parts[2], string("c"), "split last");
+    // > 출력 (이 9개): 모두 PASS
 
     cout << endl;
 
@@ -248,27 +270,41 @@ int main() {
     cout << "  ─────────────────────────────────────\n";
 
     IntStack stack;
+    // → data_=[]
     test.assert_true(stack.empty(), "새 스택은 비어있음");
+    // → empty()=true → PASS
     test.assert_eq(stack.size(), (size_t)0, "크기 0");
 
-    stack.push(10);
-    stack.push(20);
-    stack.push(30);
+    stack.push(10);   // → data_=[10]
+    stack.push(20);   // → data_=[10, 20]
+    stack.push(30);   // → data_=[10, 20, 30]
     test.assert_eq(stack.size(), (size_t)3, "push 3개 후 크기");
     test.assert_eq(stack.top(), 30, "top = 30");
+    // → top = data_.back() = 30
     test.assert_eq(stack.pop(), 30, "pop = 30");
+    // → pop_back, data_=[10,20], 반환 30
     test.assert_eq(stack.pop(), 20, "pop = 20");
+    // → data_=[10], 반환 20
     test.assert_eq(stack.size(), (size_t)1, "pop 2개 후 크기");
 
     stack.pop();
+    // → data_=[], 반환 10 (사용 안 함)
     test.assert_true(stack.empty(), "전부 pop 후 비어있음");
     test.assert_throws<runtime_error>(
         [&stack]() { stack.pop(); }, "빈 스택 pop 예외");
+    // → 빈 상태 pop → throw runtime_error → 매치 → PASS
     test.assert_throws<runtime_error>(
         [&stack]() { stack.top(); }, "빈 스택 top 예외");
+    // → 같은 이유 PASS
+    // > 결과:  총 11개 모두 PASS
 
     // ─── 결과 요약 ───
     test.summary();
+    // → total=28, passed=28, failed=0 (이상의 모든 테스트 통과)
+    // > 출력:
+    //   ═══════════════════════════════════
+    //   테스트 결과: 28개 중 28개 통과, 0개 실패
+    //   ═══════════════════════════════════
 
     // ─── TDD 가이드 ───
     cout << R"(

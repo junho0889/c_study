@@ -2,13 +2,8 @@
 =============================================================================
   C++ 학습 07단계: 템플릿과 STL (표준 라이브러리)
 =============================================================================
-  [학습 목표]
-  1. 함수 템플릿과 클래스 템플릿을 이해한다
-  2. STL 컨테이너 (vector, map, set 등)를 사용할 수 있다
-  3. 반복자(iterator)를 이해한다
-  4. STL 알고리즘 (sort, find, count 등)을 활용한다
-
   [컴파일] g++ -std=c++17 -o 07_stl main.cpp
+  [주석 표기] // > 출력  // → 변수값  // ▶ 흐름
 =============================================================================
 */
 #include <iostream>
@@ -17,8 +12,8 @@
 #include <map>
 #include <set>
 #include <unordered_map>
-#include <algorithm>  // sort, find, count...
-#include <numeric>    // accumulate
+#include <algorithm>
+#include <numeric>
 using namespace std;
 
 void lesson1_templates();
@@ -46,23 +41,11 @@ int main() {
 // =====================================================================
 // 레슨 1 — 템플릿
 // =====================================================================
-/*
-★ 템플릿 = 타입을 매개변수로 만드는 '틀'
-  → 같은 로직을 int, double, string 등 어떤 타입이든 쓸 수 있게
-
-  왜 쓸까?
-  int    max_int(int a, int b)    { return a > b ? a : b; }
-  double max_dbl(double a, double b) { return a > b ? a : b; }
-  → 로직이 같은데 타입만 다름!  → 템플릿으로 하나만 만들면 됨
-*/
-
-// 함수 템플릿
-template <typename T>       // T = 아무 타입이든 가능
+template <typename T>
 T my_max(T a, T b) {
     return (a > b) ? a : b;
 }
 
-// 클래스 템플릿
 template <typename T>
 class Box {
     T value_;
@@ -75,16 +58,27 @@ public:
 void lesson1_templates() {
     cout << "[레슨 1] 템플릿\n\n";
 
-    // 함수 템플릿: 타입 자동 추론
     cout << "  max(3, 7)     = " << my_max(3, 7) << "\n";
-    cout << "  max(3.5, 2.1) = " << my_max(3.5, 2.1) << "\n";
-    cout << "  max 타입 명시 = " << my_max<int>(3, 7) << "\n\n";
+    // → my_max<int>(3, 7) → (3 > 7) false → 7
+    // > 출력:   max(3, 7)     = 7
 
-    // 클래스 템플릿
+    cout << "  max(3.5, 2.1) = " << my_max(3.5, 2.1) << "\n";
+    // → my_max<double>(3.5, 2.1) → (3.5 > 2.1) true → 3.5
+    // > 출력:   max(3.5, 2.1) = 3.5
+
+    cout << "  max 타입 명시 = " << my_max<int>(3, 7) << "\n\n";
+    // → 명시적 인스턴스화. 결과 동일.
+    // > 출력:   max 타입 명시 = 7
+
     Box<int>    int_box(42);
+    // → Box<int> 인스턴스. value_ = 42.
     Box<string> str_box("Hello");
+    // → Box<string> 인스턴스. value_ = "Hello".
+
     cout << "  Box<int>    = " << int_box.get() << "\n";
+    // > 출력:   Box<int>    = 42
     cout << "  Box<string> = " << str_box.get() << "\n";
+    // > 출력:   Box<string> = Hello
     cout << endl;
 }
 
@@ -95,77 +89,72 @@ void lesson1_templates() {
 void lesson2_vector() {
     cout << "[레슨 2] vector (동적 배열)\n\n";
 
-    /*
-    ★ vector = 크기가 자동으로 늘어나는 배열 (가장 많이 쓰는 STL!)
-      → new/delete 안 써도 됨!
-      → 배열 대신 vector를 쓰자
+    vector<int> nums;
+    // → 빈 vector. size=0, capacity=0
+    vector<int> scores = {95, 82, 71, 88};
+    // → size=4, 내용 [95, 82, 71, 88]
+    vector<int> zeros(5, 0);
+    // → size=5, 내용 [0, 0, 0, 0, 0]
+    (void)scores; (void)zeros;
 
-    주요 멤버 함수:
-      push_back(val)  맨 뒤에 추가
-      pop_back()      맨 뒤 삭제
-      size()          현재 개수
-      empty()         비어있는가?
-      clear()         전부 삭제
-      at(i)           i번째 요소 (범위 검사 O)
-      [i]             i번째 요소 (범위 검사 X, 더 빠름)
-      front() / back() 첫/마지막 요소
-    */
+    nums.push_back(10);     // → nums = [10]
+    nums.push_back(20);     // → nums = [10, 20]
+    nums.push_back(30);     // → nums = [10, 20, 30]
 
-    // 생성
-    vector<int> nums;                      // 빈 벡터
-    vector<int> scores = {95, 82, 71, 88}; // 초기값
-    vector<int> zeros(5, 0);               // 0이 5개
-
-    // 추가
-    nums.push_back(10);
-    nums.push_back(20);
-    nums.push_back(30);
-
-    // 순회 (3가지 방법)
     cout << "  --- 순회 방법 ---\n";
 
-    // 1) 인덱스
     cout << "  인덱스:  ";
     for (size_t i = 0; i < nums.size(); i++) {
+        // i: 0, 1, 2 → nums[i]: 10, 20, 30
         cout << nums[i] << " ";
     }
     cout << "\n";
+    // > 출력:   인덱스:  10 20 30
 
-    // 2) 범위 기반 for (추천!)
     cout << "  범위for: ";
     for (int n : nums) {
+        // n: 10, 20, 30
         cout << n << " ";
     }
     cout << "\n";
+    // > 출력:   범위for: 10 20 30
 
-    // 3) 반복자 (iterator)
     cout << "  iterator: ";
     for (auto it = nums.begin(); it != nums.end(); ++it) {
+        // *it: 10, 20, 30
         cout << *it << " ";
     }
     cout << "\n\n";
+    // > 출력:   iterator: 10 20 30
 
-    // 유용한 기능들
     cout << "  크기:   " << nums.size() << "\n";
+    // > 출력:   크기:   3
     cout << "  첫번째: " << nums.front() << "\n";
+    // > 출력:   첫번째: 10
     cout << "  마지막: " << nums.back() << "\n";
+    // > 출력:   마지막: 30
 
-    nums.pop_back();  // 마지막 삭제
+    nums.pop_back();
+    // → nums = [10, 20] (size=2)
     cout << "  pop 후: ";
     for (int n : nums) cout << n << " ";
     cout << "\n";
+    // > 출력:   pop 후: 10 20
 
-    // 2차원 벡터
     cout << "\n  --- 2차원 vector ---\n";
     vector<vector<int>> matrix = {
         {1, 2, 3},
         {4, 5, 6}
     };
     for (const auto& row : matrix) {
+        // row: [1,2,3] → [4,5,6]
         cout << "  ";
         for (int val : row) cout << val << " ";
         cout << "\n";
     }
+    // > 출력:
+    //   1 2 3
+    //   4 5 6
     cout << endl;
 }
 
@@ -176,83 +165,93 @@ void lesson2_vector() {
 void lesson3_map() {
     cout << "[레슨 3] map (키-값 저장소)\n\n";
 
-    /*
-    ★ map = 키(key)로 값(value)을 저장/조회  (파이썬 dict과 비슷)
-      → 키 기준 자동 정렬됨 (내부: 레드-블랙 트리)
-
-    ★ unordered_map = 정렬 없이 더 빠름 (내부: 해시 테이블)
-      → 순서 불필요하면 이쪽이 성능 좋음
-    */
-
-    // map: 키 기준 자동 정렬
     map<string, int> ages;
     ages["홍길동"] = 25;
     ages["김철수"] = 30;
     ages["이영희"] = 22;
-    ages.insert({"박지민", 28});  // insert로도 추가 가능
+    ages.insert({"박지민", 28});
+    // → map은 키 사전순 자동 정렬:
+    //   "김철수":30, "박지민":28, "이영희":22, "홍길동":25
+    //   (한글 사전순은 유니코드 코드포인트 비교)
 
     cout << "  --- map (정렬됨) ---\n";
-    for (const auto& [name, age] : ages) {   // C++17 구조적 바인딩
+    for (const auto& [name, age] : ages) {
         cout << "  " << name << " : " << age << "세\n";
     }
+    // > 출력 (정렬 순서):
+    //   김철수 : 30세
+    //   박지민 : 28세
+    //   이영희 : 22세
+    //   홍길동 : 25세
 
-    // 조회
     cout << "\n  홍길동 나이: " << ages["홍길동"] << "\n";
+    // > 출력:   홍길동 나이: 25
 
-    // 키 존재 확인
-    if (ages.count("김철수")) {    // 0 또는 1
+    if (ages.count("김철수")) {
+        // → count = 1 (존재)
         cout << "  김철수 존재함\n";
+        // > 출력:   김철수 존재함
     }
     if (ages.find("없는사람") == ages.end()) {
+        // → find가 end() 반환 → 미존재
         cout << "  없는사람 없음\n";
+        // > 출력:   없는사람 없음
     }
 
-    // 삭제
     ages.erase("이영희");
+    // → 이영희 제거. size: 4 → 3
     cout << "  삭제 후 크기: " << ages.size() << "\n";
+    // > 출력:   삭제 후 크기: 3
 
-    // unordered_map (더 빠름, 정렬 없음)
     cout << "\n  --- unordered_map ---\n";
     unordered_map<string, string> capitals;
     capitals["한국"] = "서울";
     capitals["일본"] = "도쿄";
     capitals["미국"] = "워싱턴";
+    // → 해시 테이블. 순서 정해지지 않음 (실행마다 다를 수 있음)
 
     for (const auto& [country, capital] : capitals) {
         cout << "  " << country << " → " << capital << "\n";
     }
+    // > 출력 예 (순서는 비결정적):
+    //   한국 → 서울
+    //   미국 → 워싱턴
+    //   일본 → 도쿄
     cout << endl;
 }
 
 
 // =====================================================================
-// 레슨 4 — set (중복 없는 집합)
+// 레슨 4 — set
 // =====================================================================
 void lesson4_set() {
     cout << "[레슨 4] set (집합)\n\n";
 
-    /*
-    ★ set = 중복 없이 값 저장, 자동 정렬
-      → 중복 확인, 존재 여부 검사에 유용
-    */
-
-    set<int> numbers = {5, 3, 8, 1, 3, 5};  // 중복 자동 제거
+    set<int> numbers = {5, 3, 8, 1, 3, 5};
+    // → 중복 제거 + 자동 정렬 → {1, 3, 5, 8}
 
     cout << "  set (중복 제거 + 정렬): ";
     for (int n : numbers) {
         cout << n << " ";
     }
     cout << "\n";
+    // > 출력:   set (중복 제거 + 정렬): 1 3 5 8
 
-    numbers.insert(4);
-    numbers.insert(3);   // 이미 있으면 무시됨
+    numbers.insert(4);   // → {1, 3, 4, 5, 8}
+    numbers.insert(3);   // → 이미 존재 → 무시. {1, 3, 4, 5, 8}
 
     cout << "  insert(4,3) 후: ";
     for (int n : numbers) cout << n << " ";
     cout << "\n";
+    // > 출력:   insert(4,3) 후: 1 3 4 5 8
 
     cout << "  3이 있나? " << (numbers.count(3) ? "있음" : "없음") << "\n";
+    // → count(3) = 1 → "있음"
+    // > 출력:   3이 있나? 있음
+
     cout << "  9가 있나? " << (numbers.count(9) ? "있음" : "없음") << "\n";
+    // → count(9) = 0 → "없음"
+    // > 출력:   9가 있나? 없음
     cout << endl;
 }
 
@@ -263,83 +262,63 @@ void lesson4_set() {
 void lesson5_algorithms() {
     cout << "[레슨 5] STL 알고리즘\n\n";
 
-    /*
-    ★ <algorithm> 헤더에 있는 유용한 함수들
-      sort, find, count, min_element, max_element,
-      reverse, accumulate, for_each ...
-
-    ★ 대부분 iterator(반복자) 범위를 인자로 받음:
-      algorithm(begin, end, ...)
-    */
-
     vector<int> v = {5, 2, 8, 1, 9, 3, 7, 4, 6};
+    // → 초기: [5, 2, 8, 1, 9, 3, 7, 4, 6]
 
-    // 정렬
     sort(v.begin(), v.end());
+    // → [1, 2, 3, 4, 5, 6, 7, 8, 9]
     cout << "  오름차순: ";
     for (int n : v) cout << n << " ";
     cout << "\n";
+    // > 출력:   오름차순: 1 2 3 4 5 6 7 8 9
 
-    // 내림차순 정렬
     sort(v.begin(), v.end(), greater<int>());
+    // → [9, 8, 7, 6, 5, 4, 3, 2, 1]
     cout << "  내림차순: ";
     for (int n : v) cout << n << " ";
     cout << "\n";
+    // > 출력:   내림차순: 9 8 7 6 5 4 3 2 1
 
-    // 람다로 커스텀 정렬
     sort(v.begin(), v.end(), [](int a, int b) {
-        return a < b;  // 오름차순
+        return a < b;
     });
+    // → 다시 오름차순: [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
-    // 찾기
     auto it = find(v.begin(), v.end(), 5);
+    // → 5의 iterator. v[4]를 가리킴. (it - begin) = 4
     if (it != v.end()) {
         cout << "  5 찾음! 위치: " << (it - v.begin()) << "\n";
+        // > 출력:   5 찾음! 위치: 4
     }
 
-    // 개수 세기
     vector<int> data = {1, 2, 3, 2, 1, 2, 3};
     cout << "  2의 개수: " << count(data.begin(), data.end(), 2) << "\n";
+    // → 2가 등장: index 1, 3, 5 → 3개
+    // > 출력:   2의 개수: 3
 
-    // 최소/최대
-    auto min_it = min_element(v.begin(), v.end());
-    auto max_it = max_element(v.begin(), v.end());
+    auto min_it = min_element(v.begin(), v.end());     // → *min_it = 1
+    auto max_it = max_element(v.begin(), v.end());     // → *max_it = 9
     cout << "  최소: " << *min_it << "  최대: " << *max_it << "\n";
+    // > 출력:   최소: 1  최대: 9
 
-    // 합계 (<numeric>)
     int sum = accumulate(v.begin(), v.end(), 0);
+    // → 0 + 1+2+3+4+5+6+7+8+9 = 45
     cout << "  합계: " << sum << "\n";
+    // > 출력:   합계: 45
 
-    // 뒤집기
     reverse(v.begin(), v.end());
+    // → [9, 8, 7, 6, 5, 4, 3, 2, 1]
     cout << "  뒤집기: ";
     for (int n : v) cout << n << " ";
     cout << "\n";
+    // > 출력:   뒤집기: 9 8 7 6 5 4 3 2 1
 
-    // 조건 만족하는 것만 세기
     int even_count = count_if(v.begin(), v.end(), [](int n) {
         return n % 2 == 0;
     });
+    // → v={9,8,7,6,5,4,3,2,1}에서 짝수: 8,6,4,2 → 4개
     cout << "  짝수 개수: " << even_count << "\n";
-
-    /*
-    ★ 자주 쓰는 STL 알고리즘 정리
-    ┌─────────────────┬────────────────────────┐
-    │ 함수            │ 기능                    │
-    ├─────────────────┼────────────────────────┤
-    │ sort            │ 정렬                    │
-    │ find            │ 값 찾기                 │
-    │ count           │ 값 세기                 │
-    │ count_if        │ 조건 만족하는 개수      │
-    │ min/max_element │ 최소/최대 위치          │
-    │ accumulate      │ 합계                    │
-    │ reverse         │ 뒤집기                  │
-    │ unique          │ 연속 중복 제거          │
-    │ binary_search   │ 이진 탐색 (정렬 필요)   │
-    │ for_each        │ 각 요소에 함수 적용     │
-    │ transform       │ 변환하여 새 컨테이너    │
-    └─────────────────┴────────────────────────┘
-    */
+    // > 출력:   짝수 개수: 4
 
     cout << endl;
 }

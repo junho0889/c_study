@@ -2,46 +2,22 @@
 =============================================================================
   C++ 학습 06단계: 상속과 다형성
 =============================================================================
-  [학습 목표]
-  1. 상속의 개념과 문법을 이해한다
-  2. 가상 함수(virtual)와 오버라이딩을 안다
-  3. 다형성(polymorphism)으로 유연한 설계를 할 수 있다
-  4. 추상 클래스와 인터페이스를 이해한다
-  5. 다중 상속과 그 위험성을 안다
-
   [컴파일] g++ -std=c++17 -o 06_inherit main.cpp
+  [주석 표기] // > 출력  // → 변수값  // ▶ 흐름
 =============================================================================
 */
 #include <iostream>
 #include <string>
 #include <vector>
-#include <memory>  // unique_ptr
+#include <memory>
 using namespace std;
 
 
 // =====================================================================
 // 레슨 1 — 상속 기본
 // =====================================================================
-/*
-★ 상속 = 기존 클래스의 기능을 물려받아 새 클래스를 만드는 것
-  → 코드 재사용 + 계층 구조 설계
-
-  class 자식 : public 부모 {
-      // 부모의 public/protected 멤버를 물려받음
-  };
-
-★ 용어
-  부모 클래스 = Base class (기반 클래스)
-  자식 클래스 = Derived class (파생 클래스)
-
-★ 접근 수준과 상속
-  부모의 public     → 자식에서 public
-  부모의 protected  → 자식에서 protected
-  부모의 private    → 자식에서 접근 불가!
-*/
-
 class Animal {
-protected:              // protected: 자식 클래스에서 접근 가능
+protected:
     string name_;
     int    age_;
 
@@ -58,23 +34,25 @@ public:
     }
 };
 
-// Cat은 Animal을 상속
 class Cat : public Animal {
 private:
     string color_;
 
 public:
-    // 부모 생성자 호출
     Cat(const string& name, int age, const string& color)
         : Animal(name, age), color_(color) {}
+        // → 부모 생성자 먼저 호출 (name_, age_ 초기화)
+        //   그 다음 자식 멤버(color_) 초기화
 
     void purr() const {
-        cout << "  " << name_ << ": 그르릉~\n";  // protected라 접근 가능
+        cout << "  " << name_ << ": 그르릉~\n";
     }
 
     void info() const {
         cout << "  [고양이] " << name_ << " (" << age_ << "살, "
              << color_ << ")\n";
+        // ※ Animal::info()와 다른 시그니처. 같은 이름이지만 hides parent.
+        //   virtual이 아니므로 정적 바인딩 (호출 타입에 따라 결정)
     }
 };
 
@@ -82,33 +60,14 @@ public:
 // =====================================================================
 // 레슨 2 — 가상 함수와 다형성
 // =====================================================================
-/*
-★ 문제: 부모 포인터로 자식 객체를 가리킬 때,
-        부모의 함수가 호출됨 (자식의 것이 아니라!)
-
-★ 해결: virtual 키워드 → 실행 시 실제 타입의 함수를 호출
-
-★ 다형성(Polymorphism)
-  = 같은 코드로 다른 동작을 하게 만드는 것
-  = OOP의 가장 강력한 기능!
-
-★ 규칙
-  1. 부모의 함수에 virtual 붙이기
-  2. 자식의 함수에 override 붙이기 (실수 방지)
-  3. 소멸자에도 virtual 붙이기! (메모리 누수 방지)
-*/
-
 class Shape {
 protected:
     string name_;
 
 public:
     Shape(const string& name) : name_(name) {}
-
-    // ★ virtual 소멸자: 부모 포인터로 자식을 삭제할 때 필수!
     virtual ~Shape() {}
 
-    // virtual 함수: 자식이 재정의 가능
     virtual double area() const {
         return 0;
     }
@@ -125,9 +84,9 @@ class Circle : public Shape {
 public:
     Circle(double r) : Shape("원"), radius_(r) {}
 
-    // override: 부모의 virtual 함수를 재정의
     double area() const override {
         return 3.14159 * radius_ * radius_;
+        // → r=5: 3.14159*25 = 78.5398
     }
 
     void draw() const override {
@@ -144,6 +103,7 @@ public:
 
     double area() const override {
         return width_ * height_;
+        // → 4×6 = 24
     }
 
     void draw() const override {
@@ -160,6 +120,7 @@ public:
 
     double area() const override {
         return base_ * height_ / 2;
+        // → 3×8/2 = 12
     }
 
     void draw() const override {
@@ -172,21 +133,10 @@ public:
 // =====================================================================
 // 레슨 3 — 추상 클래스와 인터페이스
 // =====================================================================
-/*
-★ 순수 가상 함수: = 0 으로 선언 → 자식이 반드시 구현해야 함
-★ 추상 클래스: 순수 가상 함수가 1개 이상 → 직접 객체 생성 불가
-★ 인터페이스: 모든 함수가 순수 가상인 클래스 (C++에서의 인터페이스 패턴)
-
-  class Animal {
-      virtual void speak() = 0;  // 순수 가상 (자식이 반드시 구현)
-  };
-  Animal a;  // 에러!  추상 클래스는 객체 생성 불가
-*/
-
 class Printable {
 public:
     virtual ~Printable() {}
-    virtual string to_string() const = 0;  // 순수 가상 함수
+    virtual string to_string() const = 0;
 };
 
 class Document : public Printable {
@@ -194,7 +144,6 @@ class Document : public Printable {
 public:
     Document(const string& title) : title_(title) {}
 
-    // 반드시 구현해야 컴파일 가능
     string to_string() const override {
         return "[문서] " + title_;
     }
@@ -213,9 +162,18 @@ int main() {
     cout << "[레슨 1] 상속 기본\n\n";
     {
         Cat cat("나비", 3, "검정");
-        cat.info();    // Cat의 info
-        cat.eat();     // 부모(Animal)에서 물려받은 함수
-        cat.purr();    // Cat만의 함수
+        // → Animal 생성자 (name_="나비", age_=3) → Cat 멤버(color_="검정")
+
+        cat.info();
+        // → Cat::info() 호출 (정적 바인딩, virtual 아님)
+        // > 출력:   [고양이] 나비 (3살, 검정)
+
+        cat.eat();
+        // → 부모 함수, 그대로 사용
+        // > 출력:   나비이(가) 먹는다.
+
+        cat.purr();
+        // > 출력:   나비: 그르릉~
     }
 
     cout << "\n";
@@ -223,61 +181,70 @@ int main() {
     // ── 레슨 2: 다형성 ──
     cout << "[레슨 2] 다형성 (Polymorphism)\n\n";
     {
-        // ★ 핵심: 부모 포인터로 여러 자식 타입을 다룰 수 있다!
-        //   이것이 다형성의 진짜 위력
         vector<unique_ptr<Shape>> shapes;
+        // → 빈 vector
+
         shapes.push_back(make_unique<Circle>(5));
+        // → Circle(r=5) 생성, unique_ptr<Shape>로 vector에 추가
         shapes.push_back(make_unique<Rectangle>(4, 6));
         shapes.push_back(make_unique<Triangle>(3, 8));
+        // → shapes.size() = 3
 
-        // 같은 코드로 다른 동작 실행!
         double total_area = 0;
         for (const auto& shape : shapes) {
-            shape->draw();              // 각 도형에 맞는 draw 호출
+            // 1회차: shape → Circle*
+            //   draw() = "[원] 반지름=5 넓이=78.5398"
+            //   area() = 78.5398
+            //   total_area = 78.5398
+            // 2회차: shape → Rectangle*
+            //   draw() = "[사각형] 4x6 넓이=24"
+            //   area() = 24
+            //   total_area = 102.5398
+            // 3회차: shape → Triangle*
+            //   draw() = "[삼각형] 밑변=3 높이=8 넓이=12"
+            //   area() = 12
+            //   total_area = 114.5398
+            shape->draw();
             total_area += shape->area();
         }
-        cout << "  총 넓이: " << total_area << "\n";
-    }
+        // > 출력:
+        //   [원] 반지름=5 넓이=78.5398
+        //   [사각형] 4x6 넓이=24
+        //   [삼각형] 밑변=3 높이=8 넓이=12
 
-    /*
-    ★ 위 코드에서 virtual이 없었다면?
-      Shape::draw()만 호출됨 → 모두 "[도형]..."으로 출력
-      virtual 덕분에 Circle::draw(), Rectangle::draw() 등이 호출됨
-    */
+        cout << "  총 넓이: " << total_area << "\n";
+        // > 출력:   총 넓이: 114.54         ← 기본 출력 6자리 정밀도
+    }
+    // ▶ 블록 종료: vector 소멸 → 각 unique_ptr 해제 → 각 도형의 가상 소멸자 호출
+    //   virtual 소멸자 덕분에 Circle/Rectangle/Triangle 소멸자가 정확히 호출됨
 
     cout << "\n";
 
     // ── 레슨 3: 추상 클래스 ──
     cout << "[레슨 3] 추상 클래스\n\n";
     {
-        // Printable p;          // 에러!  추상 클래스는 직접 생성 불가
         Document doc("보고서");
-        cout << "  " << doc.to_string() << "\n";
+        // → doc.title_ = "보고서"
 
-        // 부모 포인터로도 사용 가능
+        cout << "  " << doc.to_string() << "\n";
+        // → "[문서] 보고서"
+        // > 출력:   [문서] 보고서
+
         Printable* ptr = &doc;
+        // → 부모 포인터로 자식 객체 가리킴 (다형성)
         cout << "  " << ptr->to_string() << "\n";
+        // → 가상 함수 → Document::to_string() 호출
+        // > 출력:   [문서] 보고서
     }
 
     cout << "\n";
 
-    // ── 참고: virtual 소멸자가 없으면 생기는 문제 ──
+    // ── 참고 ──
     cout << "[참고] virtual 소멸자의 중요성\n\n";
     cout << "  부모 포인터로 자식을 delete할 때:\n";
     cout << "  virtual ~Base()   → 자식 소멸자도 호출됨 (정상)\n";
     cout << "  ~Base() (non-virt)→ 부모 소멸자만 호출 (메모리 누수!)\n";
     cout << "  → 상속할 클래스는 항상 virtual 소멸자를 쓰자!\n";
-
-    /*
-    ★ 다중 상속 (간단 참고)
-    class A { };
-    class B { };
-    class C : public A, public B { };  // A와 B 둘 다 상속
-
-    문제: 다이아몬드 문제 (두 부모가 같은 조상일 때)
-    해결: virtual 상속
-    실무: 다중 상속은 가능하면 피하고, 인터페이스만 다중 상속
-    */
 
     cout << "\n06단계 학습 완료!\n";
     return 0;

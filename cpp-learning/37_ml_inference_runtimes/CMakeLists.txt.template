@@ -1,0 +1,63 @@
+# =============================================================================
+#  37_ml_inference_runtimes — 백엔드별 빌드 템플릿
+#  실제 사용 시 본인 환경에 맞게 경로 / find_package 활성화
+# =============================================================================
+#  본 챕터 main.cpp 자체는 SDK 없이 빌드 가능 (가이드 출력만).
+#  실제 추론 코드를 빌드하려면 아래 옵션 중 하나 켜고 별도 .cpp 추가.
+# =============================================================================
+
+cmake_minimum_required(VERSION 3.18)
+project(ml_inference LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+option(USE_LIBTORCH    "Build LibTorch sample"    OFF)
+option(USE_ONNXRUNTIME "Build ONNX Runtime sample" OFF)
+option(USE_TENSORRT    "Build TensorRT sample"    OFF)
+option(USE_OPENVINO    "Build OpenVINO sample"    OFF)
+
+# 가이드 모드 (이 챕터 main.cpp만)
+add_executable(37_ml main.cpp)
+
+# ─── LibTorch ────────────────────────────────────────────────
+if(USE_LIBTORCH)
+    # 다운로드: https://pytorch.org/cppdocs/installing.html
+    # list(APPEND CMAKE_PREFIX_PATH "/path/to/libtorch")
+    find_package(Torch REQUIRED)
+    add_executable(37_libtorch_demo libtorch_demo.cpp)
+    target_link_libraries(37_libtorch_demo PRIVATE "${TORCH_LIBRARIES}")
+    set_property(TARGET 37_libtorch_demo PROPERTY CXX_STANDARD 17)
+endif()
+
+# ─── ONNX Runtime ────────────────────────────────────────────
+if(USE_ONNXRUNTIME)
+    # 사전 빌드 바이너리 또는 vcpkg/Conan 사용
+    # find_package(onnxruntime CONFIG REQUIRED)
+    add_executable(37_ort_demo ort_demo.cpp)
+    target_include_directories(37_ort_demo PRIVATE
+        $ENV{ORT_ROOT}/include
+    )
+    target_link_directories(37_ort_demo PRIVATE
+        $ENV{ORT_ROOT}/lib
+    )
+    target_link_libraries(37_ort_demo PRIVATE onnxruntime)
+endif()
+
+# ─── TensorRT ────────────────────────────────────────────────
+if(USE_TENSORRT)
+    # NVIDIA TensorRT + CUDA Toolkit 필요
+    find_package(CUDAToolkit REQUIRED)
+    add_executable(37_trt_demo trt_demo.cpp)
+    target_link_libraries(37_trt_demo PRIVATE
+        nvinfer nvinfer_plugin nvonnxparser
+        CUDA::cudart CUDA::cuda_driver
+    )
+endif()
+
+# ─── OpenVINO ────────────────────────────────────────────────
+if(USE_OPENVINO)
+    find_package(OpenVINO REQUIRED COMPONENTS Runtime)
+    add_executable(37_ov_demo ov_demo.cpp)
+    target_link_libraries(37_ov_demo PRIVATE openvino::runtime)
+endif()

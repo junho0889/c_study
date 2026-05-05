@@ -114,27 +114,28 @@ void lesson1_common_bugs() {
     }
     */
 
-    // 실제 코드로 버그와 수정 예시
     cout << "  --- 버그 예시: 정수 나눗셈 ---\n";
     int a = 5, b = 2;
-    double wrong   = a / b;                       // 2.0 (틀림)
-    double correct = static_cast<double>(a) / b;   // 2.5 (맞음)
+    double wrong   = a / b;                        // → 5/2 = 2 (정수 나눗셈) → double 2.0
+    double correct = static_cast<double>(a) / b;   // → 5.0/2 = 2.5
     cout << "  틀림: 5/2 = " << wrong << "\n";
+    // > 출력:   틀림: 5/2 = 2
     cout << "  맞음: 5/2 = " << correct << "\n\n";
+    // > 출력:   맞음: 5/2 = 2.5
 
-    // 초기화 안 된 변수 방지: 항상 초기값을 주자
-    int x = 0;     // 좋음
-    // int y;      // 위험!
+    int x = 0;
+    (void)x;
 
     cout << "  --- 버그 예시: 배열 범위 ---\n";
     vector<int> v = {10, 20, 30};
-    // v[5];            // 범위 초과 (감지 안 됨, 위험!)
-    // v.at(5);         // 범위 초과 (out_of_range 예외 발생)
     try {
         cout << "  v.at(5) 시도... ";
+        // > 출력:   v.at(5) 시도...
         cout << v.at(5) << "\n";
+        // ▶ at(5)는 size=3 → throw out_of_range
     } catch (const out_of_range& e) {
         cout << "에러: " << e.what() << "\n";
+        // > 출력 예: 에러: vector::_M_range_check: __n (which is 5) >= this->size() (which is 3)
     }
 
     cout << endl;
@@ -228,22 +229,25 @@ void lesson3_assert_and_logging() {
 
     cout << "  --- assert ---\n";
     int result = safe_divide(10, 2);
+    // → b=2 != 0 → assert 통과 → 10/2 = 5
     cout << "  10 / 2 = " << result << "\n";
-    // safe_divide(10, 0);  // ← 주석 해제하면 assert 발동!
+    // > 출력:   10 / 2 = 5
     cout << "  (0으로 나누면 assert 발동 → 프로그램 중단)\n\n";
 
-    // 로그 디버깅 예시
     cout << "  --- 로그 디버깅 패턴 ---\n";
     vector<int> data = {3, 1, 4, 1, 5};
     cout << "  정렬 전: ";
     for (int n : data) cout << n << " ";
     cout << "\n";
+    // > 출력:   정렬 전: 3 1 4 1 5
 
     sort(data.begin(), data.end());
+    // → data = [1, 1, 3, 4, 5]
 
     cout << "  정렬 후: ";
     for (int n : data) cout << n << " ";
     cout << "\n";
+    // > 출력:   정렬 후: 1 1 3 4 5
 
     /*
     ★ 실전 디버깅 절차

@@ -1,0 +1,63 @@
+# =============================================================================
+#  Sanitizer Dockerfile 템플릿 (CI 야간 검증용)
+#  ASan + UBSan 동시 (가장 흔한 조합)
+# =============================================================================
+#  사용 예:
+#    docker build -f Dockerfile.sanitizer -t myapp:asan ../..
+#    docker run --rm \
+#       --memory=8g \
+#       --security-opt seccomp=unconfined \
+#       --ulimit core=-1 \
+#       myapp:asan
+# =============================================================================
+
+FROM ubuntu:22.04 AS sanitizer
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        clang \
+        lld \
+        cmake \
+        ninja-build \
+        libc++-dev \
+        libc++abi-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+COPY . /src
+
+ENV CC=clang CXX=clang++
+
+# RelWithDebInfo: 최적화 + 디버그 심볼 (스택 트레이스 의미 있게)
+# -fno-omit-frame-pointer: 스택 unwinding 안정
+# -fno-sanitize-recover: 첫 에러에서 즉시 abort (CI에서 명확)
+RUN cmake -GNinja -B /tmp/build \
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+        -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all -g -O1" \
+        -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined" \
+ && cmake --build /tmp/build --parallel
+
+# Sanitizer 런타임 옵션
+ENV ASAN_OPTIONS=detect_leaks=1:halt_on_error=1:abort_on_error=1:print_stacktrace=1:strict_string_checks=1:check_initialization_order=1:detect_stack_use_after_return=1
+ENV UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1
+ENV LSAN_OPTIONS=print_suppressions=0
+
+# 컨테이너에서 코어 덤프
+WORKDIR /tmp/cores
+RUN chmod 1777 /tmp/cores
+
+ENTRYPOINT ["/tmp/build/myapp"]
+
+# CI 사용 예:
+#   docker run --rm --memory=8g \
+#     --security-opt seccomp=unconfined \
+#     --ulimit core=-1 \
+#     -v $(pwd)/cores:/tmp/cores \
+#     myapp:asan
+#
+# 참고:
+#   - --memory=8g : ASan은 shadow memory로 메모리 ~3배 사용
+#   - seccomp=unconfined : ASan 일부 기능에 ptrace 필요
+#   - ulimit core : 코어 덤프 활성화

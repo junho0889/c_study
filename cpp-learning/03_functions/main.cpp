@@ -11,14 +11,13 @@
   6. 람다(익명 함수)를 이해한다
 
   [컴파일] g++ -std=c++17 -o 03_func main.cpp
+  [주석 표기] // > 출력  // → 변수값  // ▶ 흐름
 =============================================================================
 */
 #include <iostream>
 #include <string>
 using namespace std;
 
-// ── 함수 선언 (프로토타입) ──
-// main() 아래에 본문을 쓸 때, 여기에 미리 알려줘야 한다
 int  add(int a, int b);
 void greet(const string& name);
 void swap_values(int& a, int& b);
@@ -53,30 +52,12 @@ int main() {
 // =====================================================================
 // 레슨 1 — 함수 기본
 // =====================================================================
-/*
-★ 함수 = 코드를 묶어서 이름을 붙인 것 (재사용 가능)
-
-    반환형  함수이름(매개변수) {
-        처리
-        return 결과;   ← void면 생략 가능
-    }
-
-    예시:
-    int add(int a, int b) {
-        return a + b;
-    }
-
-★ 왜 함수를 쓰나?
-  1. 같은 코드를 반복 안 써도 됨
-  2. 코드를 논리 단위로 나눠서 읽기 쉬움
-  3. 버그 수정 시 한 곳만 고치면 됨
-*/
-
 int add(int a, int b) {
     return a + b;
+    // → add(3,5) 호출 시: a=3, b=5 → return 8
 }
 
-void greet(const string& name) {   // void = 반환값 없음
+void greet(const string& name) {
     cout << "  안녕하세요, " << name << "님!\n";
 }
 
@@ -84,8 +65,14 @@ void lesson1_basic() {
     cout << "[레슨 1] 함수 기본\n\n";
 
     int result = add(3, 5);
+    // → result = 8
     cout << "  add(3, 5) = " << result << "\n";
+    // > 출력:   add(3, 5) = 8
+
     greet("홍길동");
+    // → 호출 시 name = "홍길동" (참조 전달, 복사 안 함)
+    // > 출력:   안녕하세요, 홍길동님!
+
     cout << endl;
 }
 
@@ -93,57 +80,55 @@ void lesson1_basic() {
 // =====================================================================
 // 레슨 2 — 매개변수 전달 방식
 // =====================================================================
-/*
-★ 3가지 전달 방식 — 가장 중요한 개념 중 하나!
-
-┌──────────────────┬──────────────────────┬──────────────┐
-│ 방법             │ 선언                  │ 원본 변경?   │
-├──────────────────┼──────────────────────┼──────────────┤
-│ 값 전달          │ void f(int x)        │ X (복사)     │
-│ 참조 전달        │ void f(int& x)       │ O (원본)     │
-│ const 참조 전달  │ void f(const int& x) │ X (읽기전용) │
-└──────────────────┴──────────────────────┴──────────────┘
-
-언제 뭘 쓸까?
-- 작은 값(int, double) 읽기 → 값 전달
-- 큰 객체(string, vector) 읽기 → const 참조
-- 원본을 바꿔야 할 때 → 참조
-*/
-
 void double_by_value(int x) {
-    x = x * 2;   // 복사본을 바꿈 → 원본 무관
+    x = x * 2;
+    // → x는 호출자 num의 복사본. x가 변해도 num은 그대로.
 }
 
 void double_by_ref(int& x) {
-    x = x * 2;   // 원본을 직접 바꿈!
+    x = x * 2;
+    // → x는 호출자 num의 별명(alias). x를 바꾸면 num도 바뀜.
 }
 
 void swap_values(int& a, int& b) {
-    int temp = a;
-    a = b;
-    b = temp;
+    int temp = a;       // → temp = a의 현재값 보관
+    a = b;              // → a = b의 값
+    b = temp;           // → b = 보관해둔 원래 a의 값
 }
 
 void lesson2_parameters() {
     cout << "[레슨 2] 매개변수 전달 방식\n\n";
 
-    int num = 10;
+    int num = 10;       // → num = 10
 
     cout << "  --- 값 전달 ---\n";
     cout << "  전: " << num << "\n";
+    // > 출력:   전: 10
     double_by_value(num);
+    // → 함수 내부: x = 10 → x = 20. 함수 종료. num은 여전히 10.
     cout << "  후: " << num << "  (안 바뀜 → 복사본만 바뀜)\n\n";
+    // > 출력:   후: 10  (안 바뀜 → 복사본만 바뀜)
 
     cout << "  --- 참조 전달 ---\n";
     cout << "  전: " << num << "\n";
+    // > 출력:   전: 10
     double_by_ref(num);
+    // → 함수 내부: x는 num의 별명. x = 20 → num = 20.
     cout << "  후: " << num << "  (바뀜! → 원본이 바뀜)\n\n";
+    // > 출력:   후: 20  (바뀜! → 원본이 바뀜)
 
     int a = 100, b = 200;
     cout << "  --- swap ---\n";
     cout << "  전: a=" << a << " b=" << b << "\n";
+    // > 출력:   전: a=100 b=200
     swap_values(a, b);
+    // → 내부 흐름:
+    //   temp = a = 100
+    //   a = b = 200
+    //   b = temp = 100
+    // → 결과: a=200, b=100
     cout << "  후: a=" << a << " b=" << b << "\n";
+    // > 출력:   후: a=200 b=100
     cout << endl;
 }
 
@@ -151,23 +136,14 @@ void lesson2_parameters() {
 // =====================================================================
 // 레슨 3 — 함수 오버로딩 & 기본 매개변수
 // =====================================================================
-/*
-★ 오버로딩 = 같은 이름, 다른 매개변수 → 여러 함수 정의 가능
-  - 컴파일러가 매개변수 타입/개수 보고 어떤 것을 호출할지 결정
-  - 반환형만 다른 건 안 됨!
-
-★ 기본 매개변수 = 호출 시 생략하면 미리 정한 값 사용
-  - 오른쪽부터 지정해야 함
-    void f(int a, int b = 10);        // OK
-    void f(int a = 10, int b);        // 에러!
-*/
-
 int multiply(int a, int b) {
     return a * b;
+    // → int 버전. multiply(3,4) → 12
 }
 
 double multiply(double a, double b) {
     return a * b;
+    // → double 버전. multiply(2.5,3.0) → 7.5
 }
 
 void print_info(const string& name, int age) {
@@ -179,13 +155,21 @@ void print_info(const string& name, int age) {
 void lesson3_overloading() {
     cout << "[레슨 3] 오버로딩 & 기본 매개변수\n\n";
 
-    // 같은 이름이지만 타입이 다르면 알아서 구분
     cout << "  multiply(3, 4)     = " << multiply(3, 4) << "\n";
-    cout << "  multiply(2.5, 3.0) = " << multiply(2.5, 3.0) << "\n\n";
+    // → 인자가 (int, int) → int 버전 호출 → 12
+    // > 출력:   multiply(3, 4)     = 12
 
-    // 기본 매개변수
+    cout << "  multiply(2.5, 3.0) = " << multiply(2.5, 3.0) << "\n\n";
+    // → 인자가 (double, double) → double 버전 호출 → 7.5
+    // > 출력:   multiply(2.5, 3.0) = 7.5
+
     print_info("홍길동", 25);
-    print_info("김철수");         // age 생략 → 기본값 0
+    // → name="홍길동", age=25 → 두 줄 모두 출력
+    // > 출력:   이름: 홍길동 / 나이: 25
+
+    print_info("김철수");
+    // → age 생략 → 기본값 0 → if(age>0) false → 이름만 출력
+    // > 출력:   이름: 김철수
     cout << endl;
 }
 
@@ -193,54 +177,41 @@ void lesson3_overloading() {
 // =====================================================================
 // 레슨 4 — 변수의 스코프
 // =====================================================================
-int g_count = 0;  // 전역 변수 (프로그램 전체에서 접근 가능)
+int g_count = 0;        // → 전역. 프로그램 시작 시 0으로 초기화
 
 void lesson4_scope() {
     cout << "[레슨 4] 변수의 스코프 (유효 범위)\n\n";
 
-    /*
-    ★ 스코프 = "이 변수를 어디서 쓸 수 있는가?"
+    int local_var = 10;  // → local_var = 10. 이 함수 안에서만 유효.
 
-    ┌─ 전역 (global) ─────────────────┐
-    │  int g = 100;   ← 어디서나      │
-    │                                  │
-    │  ┌─ 함수 (local) ──────────┐    │
-    │  │  int a = 10;  ← 함수 안 │    │
-    │  │                          │    │
-    │  │  ┌─ 블록 ──────────┐    │    │
-    │  │  │  int b = 5;      │    │    │
-    │  │  └──────────────────┘    │    │
-    │  │  // b 접근 불가          │    │
-    │  └──────────────────────────┘    │
-    └──────────────────────────────────┘
-
-    ★ 좋은 습관
-    1. 전역 변수를 최소화하라 (디버깅이 어려워짐)
-    2. 변수는 쓰기 직전에 선언하라
-    3. 범위를 가능한 좁게 유지하라
-    */
-
-    int local_var = 10;          // 이 함수 안에서만 유효
     cout << "  전역: g_count = " << g_count << "\n";
+    // > 출력:   전역: g_count = 0
     cout << "  지역: local_var = " << local_var << "\n";
+    // > 출력:   지역: local_var = 10
 
     {
-        int block_var = 99;      // 이 { } 안에서만 유효
+        int block_var = 99;
+        // → 이 { } 안에서만 유효
         cout << "  블록: block_var = " << block_var << "\n";
+        // > 출력:   블록: block_var = 99
     }
-    // block_var 은 여기서 접근 불가 (컴파일 에러)
+    // ← 여기서 block_var는 더 이상 존재하지 않음 (스택에서 사라짐)
 
     // ── static 지역 변수 ──
-    //  함수가 끝나도 값이 유지됨 (호출 횟수 세기 등에 사용)
     cout << "\n  --- static 변수 ---\n";
     auto call_counter = []() {
-        static int count = 0;    // 첫 호출 때만 초기화, 이후 유지
+        static int count = 0;
+        // → static: 첫 호출 때만 0으로 초기화, 이후 호출 간 값 유지
         count++;
         cout << "  호출 횟수: " << count << "\n";
     };
-    call_counter();   // 1
-    call_counter();   // 2
-    call_counter();   // 3
+    call_counter();   // → count: 0 → 1 → "호출 횟수: 1"
+    call_counter();   // → count: 1 → 2 → "호출 횟수: 2"
+    call_counter();   // → count: 2 → 3 → "호출 횟수: 3"
+    // > 출력:
+    //   호출 횟수: 1
+    //   호출 횟수: 2
+    //   호출 횟수: 3
     cout << endl;
 }
 
@@ -248,31 +219,23 @@ void lesson4_scope() {
 // =====================================================================
 // 레슨 5 — 재귀 함수
 // =====================================================================
-/*
-★ 재귀 = 함수가 자기 자신을 호출하는 것
-
-    반드시 '기저 조건'(탈출 조건)이 있어야 멈춘다!
-    없으면 → 무한 재귀 → 스택 오버플로우 (프로그램 크래시)
-
-    factorial(4) 의 작동:
-    4 * factorial(3)
-    4 * 3 * factorial(2)
-    4 * 3 * 2 * factorial(1)
-    4 * 3 * 2 * 1            ← 기저 조건 도달!
-    = 24
-*/
-
 int factorial(int n) {
-    if (n <= 1) return 1;          // 기저 조건!
-    return n * factorial(n - 1);   // 재귀 호출
+    if (n <= 1) return 1;          // 기저 조건
+    return n * factorial(n - 1);   // 재귀
+    // 호출 트리 (n=4 예):
+    //   factorial(4) = 4 * factorial(3)
+    //   factorial(3) = 3 * factorial(2)
+    //   factorial(2) = 2 * factorial(1)
+    //   factorial(1) = 1                ← 기저
+    //   되돌아가며: 2*1=2, 3*2=6, 4*6=24
 }
 
 int fibonacci(int n) {
     if (n <= 0) return 0;
     if (n == 1) return 1;
     return fibonacci(n - 1) + fibonacci(n - 2);
-    // 주의: 이 방식은 매우 비효율적 (학습용)
-    // 실무에서는 반복문이나 메모이제이션 사용
+    // 시퀀스: 0, 1, 1, 2, 3, 5, 8, 13, 21, 34, ...
+    // ※ O(2^n) - 매우 비효율. 학습용. 실무는 메모이제이션/iter.
 }
 
 void lesson5_recursion() {
@@ -280,14 +243,32 @@ void lesson5_recursion() {
 
     cout << "  --- 팩토리얼 ---\n";
     for (int i = 1; i <= 7; i++) {
+        // i=1 → 1!=1
+        // i=2 → 2!=2
+        // i=3 → 3!=6
+        // i=4 → 4!=24
+        // i=5 → 5!=120
+        // i=6 → 6!=720
+        // i=7 → 7!=5040
         cout << "  " << i << "! = " << factorial(i) << "\n";
     }
+    // > 출력:
+    //   1! = 1
+    //   2! = 2
+    //   3! = 6
+    //   4! = 24
+    //   5! = 120
+    //   6! = 720
+    //   7! = 5040
 
     cout << "\n  --- 피보나치 수열 ---\n  ";
     for (int i = 0; i < 10; i++) {
+        // i: 0 1 2 3 4 5 6 7 8 9
+        // fib: 0 1 1 2 3 5 8 13 21 34
         cout << fibonacci(i) << " ";
     }
     cout << "\n";
+    // > 출력:   0 1 1 2 3 5 8 13 21 34
     cout << endl;
 }
 
@@ -298,55 +279,57 @@ void lesson5_recursion() {
 void lesson6_lambda() {
     cout << "[레슨 6] 람다 (익명 함수)\n\n";
 
-    /*
-    ★ 람다 = 이름 없는 함수, 변수에 담아 쓸 수 있음
-      Python: lambda x: x * 2
-      JS:     (x) => x * 2
-      C++:    [](int x) { return x * 2; }
-
-    ★ 구조:
-      [캡처](매개변수) -> 반환형 { 본문 }
-
-    ★ 캡처 = 바깥 변수를 람다 안에서 쓰는 방법
-      []    아무것도 안 가져옴
-      [=]   바깥 변수를 값으로 복사
-      [&]   바깥 변수를 참조로 가져옴
-      [x]   x만 값으로 복사
-      [&x]  x만 참조로 가져옴
-    */
-
     // 기본 람다
     auto say_hi = []() {
         cout << "  안녕! (람다)\n";
     };
     say_hi();
+    // > 출력:   안녕! (람다)
 
     // 매개변수 + 반환
     auto add = [](int a, int b) {
         return a + b;
+        // 반환형 자동 추론: int + int → int
     };
     cout << "  add(3,4) = " << add(3, 4) << "\n";
+    // → add(3,4) = 7
+    // > 출력:   add(3,4) = 7
 
-    // 캡처: 바깥 변수 사용
+    // 캡처: 값 복사
     int factor = 3;
-    auto times = [factor](int x) {     // factor를 값으로 복사
+    auto times = [factor](int x) {
+        // → 람다 생성 시 factor=3을 복사. 이후 외부 factor 변경되어도
+        //   람다 내부 사본은 3 그대로.
         return x * factor;
     };
     cout << "  5 * " << factor << " = " << times(5) << "\n";
+    // → times(5) = 5 * 3 = 15
+    // > 출력:   5 * 3 = 15
 
-    // 참조 캡처: 바깥 변수를 직접 수정
+    // 참조 캡처: 외부 직접 수정
     int counter = 0;
     auto inc = [&counter]() { counter++; };
-    inc(); inc(); inc();
+    // → counter를 참조로 캡처
+    inc();   // counter: 0 → 1
+    inc();   // counter: 1 → 2
+    inc();   // counter: 2 → 3
     cout << "  counter (3번 증가) = " << counter << "\n";
+    // > 출력:   counter (3번 증가) = 3
 
-    // ── 실용: 정렬 기준에 람다 사용 ──
+    // ── 정렬 기준에 람다 사용 ──
     int nums[] = {5, 2, 8, 1, 9};
     int size = 5;
 
-    auto compare = [](int a, int b) { return a > b; };  // 내림차순
+    auto compare = [](int a, int b) { return a > b; };
+    // → 내림차순 비교: a가 더 크면 true
 
-    // 버블 정렬 (학습용, 실무에서는 std::sort 사용)
+    // 버블 정렬 (학습용)
+    // 진행 (간략):
+    //   초기:    [5, 2, 8, 1, 9]
+    //   pass 1:  [5, 8, 2, 9, 1]   (인접 pair 비교 후 큰 게 앞으로)
+    //   pass 2:  [8, 5, 9, 2, 1]
+    //   pass 3:  [8, 9, 5, 2, 1]
+    //   pass 4:  [9, 8, 5, 2, 1]
     for (int i = 0; i < size - 1; i++)
         for (int j = 0; j < size - i - 1; j++)
             if (compare(nums[j + 1], nums[j]))
@@ -355,5 +338,6 @@ void lesson6_lambda() {
     cout << "  내림차순: ";
     for (int n : nums) cout << n << " ";
     cout << "\n";
+    // > 출력:   내림차순: 9 8 5 2 1
     cout << endl;
 }

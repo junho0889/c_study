@@ -1,0 +1,80 @@
+# =============================================================================
+#  멀티 스테이지 Dockerfile 템플릿 (C++ 운영 빌드용)
+# =============================================================================
+#  사용 예:
+#    docker build -f Dockerfile.multistage -t myapp:latest ../..
+#    docker run --rm myapp:latest
+# =============================================================================
+
+# ==== Stage 1 : Builder ====
+FROM ubuntu:22.04 AS builder
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# 빌드 도구 - --no-install-recommends 와 캐시 정리로 레이어 작게
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        g++ \
+        cmake \
+        ninja-build \
+        git \
+        pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+
+# 의존성 매니페스트 먼저 복사 → Docker 레이어 캐시 활용
+# 소스가 바뀌어도 이 레이어는 재실행 안 됨 (의존성 안 바뀌었으면)
+COPY CMakeLists.txt /src/CMakeLists.txt
+# COPY vcpkg.json /src/vcpkg.json  # vcpkg 사용 시
+# COPY conanfile.txt /src/         # Conan 사용 시
+
+# 캐시 마운트로 ccache + apt 재사용
+RUN --mount=type=cache,target=/root/.ccache \
+    cmake -GNinja -B /tmp/build -DCMAKE_BUILD_TYPE=Release
+
+# 소스 복사 → 빌드
+COPY src/ /src/src/
+RUN --mount=type=cache,target=/root/.ccache \
+    cmake --build /tmp/build --parallel
+
+# 심볼 분리 (운영은 작은 stripped, 디버그는 별도)
+RUN cp /tmp/build/myapp /tmp/myapp \
+ && objcopy --only-keep-debug /tmp/myapp /tmp/myapp.debug \
+ && strip --strip-all /tmp/myapp \
+ && objcopy --add-gnu-debuglink=/tmp/myapp.debug /tmp/myapp
+
+
+# ==== Stage 2 : Runtime ====
+# 운영 베이스는 작은 distroless 권장. 셸 없음 = 침투 표면 작음.
+FROM gcr.io/distroless/cc-debian12:nonroot
+
+# 빌드된 바이너리만 복사
+COPY --from=builder /tmp/myapp /usr/local/bin/myapp
+
+# distroless 'nonroot' 사용자 (uid 65532) 자동 적용
+
+# 헬스체크 - 자체 진단 엔드포인트 / 명령
+# (distroless는 셸 없으니 바이너리 자체에 --healthcheck 옵션 구현)
+# HEALTHCHECK --interval=30s --timeout=3s \
+#   CMD ["/usr/local/bin/myapp", "--healthcheck"] || exit 1
+
+ENTRYPOINT ["/usr/local/bin/myapp"]
+
+
+# ==== (선택) Stage 3 : Debug 이미지 ====
+# 같은 코드 + 심볼 + 셸. 동일 태그에 -debug suffix
+FROM ubuntu:22.04 AS debug
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gdb \
+        ca-certificates \
+        libstdc++6 \
+        strace \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /tmp/myapp /usr/local/bin/myapp
+COPY --from=builder /tmp/myapp.debug /usr/local/bin/myapp.debug
+ENTRYPOINT ["/usr/local/bin/myapp"]
+
+# 빌드:
+#   docker build -f Dockerfile.multistage --target debug -t myapp:debug ../..

@@ -2,15 +2,8 @@
 =============================================================================
   C++ 학습 05단계: 클래스와 객체지향 기초 (OOP)
 =============================================================================
-  [학습 목표]
-  1. 클래스와 객체의 개념을 이해한다
-  2. 멤버 변수와 멤버 함수를 작성할 수 있다
-  3. 접근 제어(public/private/protected)를 이해한다
-  4. 생성자와 소멸자를 이해한다
-  5. this 포인터, static 멤버를 안다
-  6. 연산자 오버로딩 기초를 안다
-
   [컴파일] g++ -std=c++17 -o 05_oop main.cpp
+  [주석 표기] // > 출력  // → 변수값  // ▶ 흐름
 =============================================================================
 */
 #include <iostream>
@@ -21,55 +14,29 @@ using namespace std;
 // =====================================================================
 // 레슨 1 — 클래스 기본
 // =====================================================================
-/*
-★ 클래스 = 변수(데이터)와 함수(동작)를 하나로 묶은 것
-  → 붕어빵 '틀' 이고, 객체는 그 틀로 만든 '붕어빵'
-
-★ 구조:
-  class 클래스이름 {
-  public:       ← 외부에서 접근 가능
-      함수들...
-  private:      ← 외부에서 접근 불가 (데이터 보호)
-      변수들...
-  };            ← 세미콜론 필수!
-
-★ 접근 제어
-  public    : 아무데서나 접근 가능
-  private   : 클래스 내부에서만 (기본값)
-  protected : 클래스 내부 + 자식 클래스에서 (06단계)
-*/
-
 class Dog {
 private:
-    // ── 멤버 변수 (데이터) ──
-    // private: 외부에서 직접 접근 불가 → getter/setter로 접근
     string name_;
     int    age_;
 
 public:
-    // ── 생성자 (Constructor) ──
-    // 객체가 만들어질 때 자동 호출되는 특수 함수
-    // 이름이 클래스명과 같고, 반환형이 없다
     Dog(const string& name, int age)
-        : name_(name), age_(age)   // ← 초기화 리스트 (권장 방식)
+        : name_(name), age_(age)
     {
+        // → 객체가 만들어질 때 호출. name_, age_ 초기화 후 본문 실행.
         cout << "  [생성] " << name_ << " 탄생!\n";
     }
 
-    // 기본 생성자 (매개변수 없음)
     Dog() : name_("이름없음"), age_(0) {
         cout << "  [생성] 이름 없는 강아지 탄생!\n";
     }
 
-    // ── 소멸자 (Destructor) ──
-    // 객체가 사라질 때 자동 호출
-    // 메모리 해제 등 정리 작업에 사용
     ~Dog() {
+        // → 객체 수명 종료 시 자동 호출. 블록 끝, vector pop, delete 등.
         cout << "  [소멸] " << name_ << " 안녕...\n";
     }
 
-    // ── 멤버 함수 (메서드) ──
-    void bark() const {   // const = 이 함수는 멤버 변수를 바꾸지 않는다
+    void bark() const {
         cout << "  " << name_ << ": 멍멍!\n";
     }
 
@@ -77,12 +44,11 @@ public:
         cout << "  이름: " << name_ << " / 나이: " << age_ << "살\n";
     }
 
-    // ── Getter / Setter ──
-    // private 변수에 대한 간접 접근 방법
     string get_name() const { return name_; }
     int    get_age() const  { return age_; }
     void   set_age(int age) {
-        if (age >= 0) age_ = age;    // 유효성 검사도 가능
+        if (age >= 0) age_ = age;
+        // ▶ age >= 0 검사 → 음수면 무시, 양수면 갱신
     }
 };
 
@@ -94,22 +60,23 @@ class Player {
 private:
     string name_;
     int    hp_;
-    static int total_count_;   // static: 모든 객체가 공유하는 변수
+    static int total_count_;   // 모든 객체가 공유
 
 public:
     Player(const string& name, int hp) : name_(name), hp_(hp) {
         total_count_++;
+        // → 객체 생성마다 +1
     }
 
     ~Player() {
         total_count_--;
+        // → 객체 소멸마다 -1
     }
 
-    // this = 현재 객체 자신을 가리키는 포인터
-    // this->name_ 과 name_ 은 같지만, 매개변수와 이름이 겹칠 때 구분용
     Player& set_hp(int hp) {
-        this->hp_ = hp;       // this->hp_ = 멤버, hp = 매개변수
-        return *this;         // 자기 자신 반환 → 메서드 체이닝 가능
+        this->hp_ = hp;
+        return *this;
+        // → 자기 자신 반환 → 메서드 체이닝 가능
     }
 
     Player& heal(int amount) {
@@ -121,38 +88,31 @@ public:
         cout << "  " << name_ << " (HP: " << hp_ << ")\n";
     }
 
-    // static 함수: 객체 없이 호출 가능 (Player::get_count())
     static int get_count() { return total_count_; }
 };
 
-int Player::total_count_ = 0;   // static 변수 초기화 (클래스 밖에서!)
+int Player::total_count_ = 0;
+// → 프로그램 시작 시 0으로 초기화
 
 
 // =====================================================================
 // 레슨 3 — 연산자 오버로딩 기초
 // =====================================================================
-/*
-★ 연산자 오버로딩 = +, -, ==, << 등을 내 클래스에 맞게 재정의
-
-예: Vector2D 끼리 더하기를 v1 + v2 로 쓸 수 있게 하기
-*/
 class Vector2D {
 public:
     double x, y;
 
     Vector2D(double x = 0, double y = 0) : x(x), y(y) {}
 
-    // + 연산자 오버로딩
     Vector2D operator+(const Vector2D& other) const {
         return Vector2D(x + other.x, y + other.y);
+        // → 새 Vector2D 생성하여 반환 (원본 변경 X)
     }
 
-    // == 연산자 오버로딩
     bool operator==(const Vector2D& other) const {
         return x == other.x && y == other.y;
     }
 
-    // << 출력 연산자 (friend: 클래스 외부 함수인데 private 접근 허용)
     friend ostream& operator<<(ostream& os, const Vector2D& v) {
         os << "(" << v.x << ", " << v.y << ")";
         return os;
@@ -171,20 +131,36 @@ int main() {
     // ── 레슨 1: 클래스 기본 ──
     cout << "[레슨 1] 클래스 기본\n\n";
     {
-        Dog dog1("바둑이", 3);    // 생성자 호출
+        Dog dog1("바둑이", 3);
+        // > 출력:   [생성] 바둑이 탄생!
+        // → dog1.name_="바둑이", dog1.age_=3
+
         Dog dog2("흰둥이", 1);
+        // > 출력:   [생성] 흰둥이 탄생!
+        // → dog2.name_="흰둥이", dog2.age_=1
 
         dog1.bark();
+        // > 출력:   바둑이: 멍멍!
+
         dog1.info();
+        // > 출력:   이름: 바둑이 / 나이: 3살
+
         dog2.info();
+        // > 출력:   이름: 흰둥이 / 나이: 1살
 
         dog1.set_age(4);
+        // → dog1.age_ = 4 (4 >= 0이므로 갱신)
         cout << "  바둑이 나이 변경: " << dog1.get_age() << "\n";
-
-        // dog1.name_ = "test";  // 에러! private이라 접근 불가
+        // > 출력:   바둑이 나이 변경: 4
 
         cout << "  -- 블록 끝, 소멸자 호출됨 --\n";
-    }  // ← 여기서 dog1, dog2 소멸자 자동 호출!
+        // > 출력:   -- 블록 끝, 소멸자 호출됨 --
+    }
+    // ▶ 블록 종료 시점에 LIFO 순으로 소멸자 호출
+    //   → dog2 먼저 (나중에 만들어졌으니), 그 다음 dog1
+    // > 출력:
+    //   [소멸] 흰둥이 안녕...
+    //   [소멸] 바둑이 안녕...
 
     cout << "\n";
 
@@ -192,15 +168,28 @@ int main() {
     cout << "[레슨 2] this 포인터 & static\n\n";
     {
         Player p1("전사", 100);
+        // → total_count_: 0 → 1
         Player p2("마법사", 80);
-        cout << "  플레이어 수: " << Player::get_count() << "\n";
+        // → total_count_: 1 → 2
 
-        // 메서드 체이닝: this 반환 덕분에 연속 호출 가능
+        cout << "  플레이어 수: " << Player::get_count() << "\n";
+        // > 출력:   플레이어 수: 2
+
         p1.set_hp(50).heal(20).heal(10);
-        p1.info();   // HP: 80
+        // ▶ 체이닝 흐름:
+        //   set_hp(50): p1.hp_ = 50, return *this
+        //   .heal(20):  p1.hp_ = 70, return *this
+        //   .heal(10):  p1.hp_ = 80, return *this
+        // → p1.hp_ = 80
+
+        p1.info();
+        // > 출력:   전사 (HP: 80)
         p2.info();
+        // > 출력:   마법사 (HP: 80)
     }
+    // ▶ 블록 종료: p2 소멸 (count: 2→1), p1 소멸 (count: 1→0)
     cout << "  블록 후 플레이어 수: " << Player::get_count() << "\n";
+    // > 출력:   블록 후 플레이어 수: 0
 
     cout << "\n";
 
@@ -209,12 +198,19 @@ int main() {
     {
         Vector2D v1(3, 4);
         Vector2D v2(1, 2);
-        Vector2D v3 = v1 + v2;   // operator+ 호출
+        Vector2D v3 = v1 + v2;
+        // → operator+ 호출: Vector2D(3+1, 4+2) = Vector2D(4, 6)
+        // → v3 = (4, 6)
 
         cout << "  v1 = " << v1 << "\n";
+        // > 출력:   v1 = (3, 4)
         cout << "  v2 = " << v2 << "\n";
+        // > 출력:   v2 = (1, 2)
         cout << "  v1 + v2 = " << v3 << "\n";
+        // > 출력:   v1 + v2 = (4, 6)
         cout << "  v1 == v2 ? " << (v1 == v2 ? "같다" : "다르다") << "\n";
+        // → 3==1 false → 다르다
+        // > 출력:   v1 == v2 ? 다르다
     }
 
     cout << "\n05단계 학습 완료!\n";
